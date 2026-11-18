@@ -75,6 +75,8 @@ the preset's relit scene, and luminance looks auto-normalise exposure.
 | Audio | 10 | EQ Body, Bass Punch, Beat Strobe, Speaker Cone, Spectrum Crown, Oscilloscope, Stage Beams, Confetti |
 | Stylize | 24 | Oil Paint, Pencil, Watercolor, Engraving, ASCII, CRT, VHS, Game Boy, CMYK, Blueprint, PICO-8, Mondrian, Predator |
 
+The library also has a **Presets** category holding the 26 presets above, so search, shuffle and auto-cycle can switch
+the base look too (an effect picked after a preset stacks on top of it).
 Browse by category or search; `[` `]` step, `X` shuffle, `0` off, auto-cycle every 4/8/16 s, ✌ steps effects while one is on.
 Add your own: `fx("Cat", "id", "Name", "knob A", "knob B", \`vec3 fx(vec2 t){ ... }\`)` in any `fx_*.js`.
 

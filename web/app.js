@@ -600,8 +600,9 @@ function fxProg(id) {
 }
 function runFx(dt) {
   if (!FXS.id) return false;
-  const p = fxProg(FXS.id); if (!p) return false;
   if (FXS.auto > 0 && now - FXS.lastSwitch > FXS.auto * 1000) fxStep(1, true);
+  if (FXS.id.startsWith("preset-")) return false;   // library entry that is a base preset: no extra pass
+  const p = fxProg(FXS.id); if (!p) return false;
   if (fxClear) { for (const st of F.fxSt) { target(st); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); } fxClear = false; }
   const nx = 1 - F.si;
   gl.bindFramebuffer(gl.FRAMEBUFFER, F.fxFb[nx]); gl.viewport(0, 0, F.fxOut.w, F.fxOut.h);
@@ -624,6 +625,7 @@ function fxList() {
 function setFx(id, announce) {
   FXS.id = id; fxClear = true; FXS.lastSwitch = now;
   const def = FX.find((f) => f.id === id);
+  if (def && def.preset != null) applyPreset(def.preset);
   $("#fxAl").textContent = def ? def.a : "A"; $("#fxBl").textContent = def ? def.b : "B";
   document.querySelectorAll("#fxgrid button").forEach((b) => b.classList.toggle("on", b.dataset.id === id));
   const on = document.querySelector(`#fxgrid button[data-id="${id}"]`); if (on) on.scrollIntoView({ block: "nearest" });
@@ -636,7 +638,14 @@ function fxStep(dir, random) {
   i = random ? Math.floor(Math.random() * list.length) : (i + dir + list.length) % list.length;
   setFx(list[i].id, true);
 }
+// the 26 original presets also live in the library (own category), so search / shuffle / auto-cycle reach them
+function addPresetsToLibrary() {
+  if (FX.some((f) => f.preset != null)) return;
+  FX.splice(0, 0, ...PRESETS.map((p, i) => ({ id: "preset-" + i, cat: "Presets", name: p[0], a: "—", b: "—", preset: i, desc: p[1] })));
+  FX_CATS.unshift("Presets");
+}
 function buildFxPanel() {
+  addPresetsToLibrary();
   const cats = $("#fxcats");
   ["All", ...FX_CATS].forEach((c) => { const b = document.createElement("button"); b.textContent = c === "All" ? `All ${FX.length}` : `${c} ${FX.filter((f) => f.cat === c).length}`; b.dataset.cat = c;
     b.onclick = () => { FXS.cat = c; cats.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); fillFxGrid(); }; cats.appendChild(b); });
@@ -652,7 +661,7 @@ function buildFxPanel() {
 }
 function fillFxGrid() {
   const g = $("#fxgrid"); g.innerHTML = "";
-  for (const f of fxList()) { const b = document.createElement("button"); b.dataset.id = f.id; b.textContent = f.name; b.title = f.cat;
+  for (const f of fxList()) { const b = document.createElement("button"); b.dataset.id = f.id; b.textContent = f.name; b.title = f.desc ? `${f.cat} · ${f.desc}` : f.cat; if (f.preset != null) b.classList.add("pre");
     if (f.id === FXS.id) b.classList.add("on"); b.onclick = () => setFx(FXS.id === f.id ? "" : f.id); g.appendChild(b); }
   $("#fxcount").textContent = `${fxList().length} shown`;
 }
@@ -671,7 +680,7 @@ async function fxSheet(ids, cols = 6, tw = 320, frames = 12) {
   }
   setFx(keep); view = v; layout(); return sh;
 }
-function fxCompileAll() { const bad = {}; for (const f of FX) { fxProg(f.id); if (fxBroken[f.id]) bad[f.id] = fxBroken[f.id].slice(0, 300); } return bad; }
+function fxCompileAll() { const bad = {}; for (const f of FX) { if (f.preset != null) continue; fxProg(f.id); if (fxBroken[f.id]) bad[f.id] = fxBroken[f.id].slice(0, 300); } return bad; }
 
 // =============================================================== overlay: markers, bolts, labels
 function scr(x, y) { const H = view === 4 ? ov.height / 2 : ov.height; return [(chk("mirror") ? 1 - x : x) * ov.width, y * H]; }
@@ -716,7 +725,7 @@ function hud(lights) {
   const s = frame.stats || {};
   const g = hands.filter((h) => h.a > .5).map((h) => G_ICON[h.g] || "·").join(" ");
   $("#hud").innerHTML =
-    `<span class="pill hot"><b>${PRESETS[presetIdx][0]}</b>${FXS.id ? " + " + (FX.find((f) => f.id === FXS.id) || {}).name : ""}</span>` +
+    `<span class="pill hot"><b>${PRESETS[presetIdx][0]}</b>${FXS.id && !FXS.id.startsWith("preset-") ? " + " + (FX.find((f) => f.id === FXS.id) || {}).name : ""}</span>` +
     `<span class="pill">model <b>${s.model_ms}ms</b>${s.gpus > 1 ? " ×" + s.gpus : ""}</span>` +
     `<span class="pill">ai <b>${s.fps}</b> fps</span><span class="pill">cam <b>${s.cam}</b>${s.gain > 1.05 ? " · gain ×" + s.gain : ""}</span>` +
     `<span class="pill">hands <b>${hands.filter((h) => h.a > .5).length}</b> ${g}</span><span class="pill">lights <b>${lights.length}</b></span>` +
@@ -805,7 +814,7 @@ async function bake() {
   if (!BK.clip) { alert("Load or pick a clip first."); return; }
   if (view === 4) document.querySelector('button[data-v="0"]').click();   // split view doubles the height
   const qs = new URLSearchParams({ p: BK.clip, start: +$("#bkin").value || 0, end: +$("#bkout").value || 0, maxw: $("#bksize").value,
-    crf: $("#bkq").value, song: BK.song, tag: FXS.id || PRESETS[presetIdx][0].replace(/\W+/g, "") });
+    crf: $("#bkq").value, song: BK.song, tag: (FXS.id && !FXS.id.startsWith("preset-") ? FXS.id : PRESETS[presetIdx][0]).replace(/\W+/g, "") });
   bkStatus("preparing (decoding the soundtrack, loading the hand tracker)…");
   const meta = await (await fetch("/bake/open?" + qs)).json();
   if (!meta.ok) { bkStatus("✕ " + meta.err); return; }
