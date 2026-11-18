@@ -85,6 +85,8 @@ Browse by category or search; `[` `]` step, `X` shuffle, `0` off, auto-cycle eve
 Add your own: `fx("Cat", "id", "Name", "knob A", "knob B", \`vec3 fx(vec2 t){ ... }\`)` in any `fx_*.js`.
 
 Gestures: **âœŒ peace** = next preset Â· **âœŠ hold** = blackout Â· **âœŠâ†’ðŸ– burst** = shockwave.
+Under View, **Hand tracking** (`T`) turns hands off completely and **✌ switches looks** (`G`) stops the peace sign changing
+presets/effects; both are remembered and presets never override them.
 Keys: `â†` `â†’` presets, `1`â€“`6` views, `M` mirror, `R` record webm (with song audio), `S` snapshot,
 `C` clear spells/placed lights, `B` shockwave, `H` hide panel, `F` fullscreen.
 

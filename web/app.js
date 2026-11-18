@@ -321,6 +321,7 @@ function classify(p) {
   return { g, open: n / 5, pinchD, palm };
 }
 function onHands(list) {
+  if (!chk("htrack")) list = [];   // tracking off: existing hands fade out, nothing new is picked up
   const t = now, taken = new Set();
   for (const hd of list || []) {
     let best = null, bd = .25;
@@ -336,7 +337,7 @@ function onHands(list) {
 let lastPresetSwitch = 0, blackTarget = 0;
 function onGesture(h, from, to, t) {
   if (S.gestures) {
-    if (to === "peace" && t - lastPresetSwitch > 1300) { lastPresetSwitch = t; if (FXS.id) fxStep(1); else applyPreset(presetIdx + 1, true); }
+    if (to === "peace" && chk("gswitch") && t - lastPresetSwitch > 1300) { lastPresetSwitch = t; if (FXS.id) fxStep(1); else applyPreset(presetIdx + 1, true); }
     if (to === "open" && from === "fist") { const c = palmCenter(h.p); shockwave(c[0], c[1], 1); }
   }
   if (S.painter) {
@@ -775,6 +776,12 @@ function toggleRec() {
 }
 function snap() { const c = document.createElement("canvas"); c.width = cv.width; c.height = cv.height; const x = c.getContext("2d"); x.drawImage(cv, 0, 0); x.drawImage(ov, 0, 0); c.toBlob((b) => dl(b, `depthr-${stamp()}.png`), "image/png"); }
 function clearArt() { spell = []; placed = []; carry = null; ghostClear = true; toast("cleared"); }
+// these two are user locks, not look settings: presets never touch them, and they survive a reload
+for (const id of ["htrack", "gswitch"]) {
+  const el = $("#" + id), v = localStorage.getItem("depthr." + id);
+  if (v != null) el.checked = v === "1";
+  el.addEventListener("change", () => localStorage.setItem("depthr." + id, el.checked ? "1" : "0"));
+}
 $("#rec").onclick = toggleRec; $("#snap").onclick = snap; $("#clear").onclick = clearArt;
 $("#srcgo").onclick = async () => { const s = $("#src").value.trim() || "auto"; const r = await (await fetch("/source?s=" + encodeURIComponent(s))).json(); if (!r.ok) alert(r.err); plateInit = true; };
 addEventListener("keydown", (e) => {
@@ -789,6 +796,8 @@ addEventListener("keydown", (e) => {
   else if (k === "arrowleft") applyPreset(presetIdx - 1, true);
   else if (k === "m") $("#mirror").click();
   else if (k === "k") $("#cut").click();
+  else if (k === "t") { $("#htrack").click(); toast(chk("htrack") ? "hand tracking on" : "hand tracking off"); }
+  else if (k === "g") { $("#gswitch").click(); toast(chk("gswitch") ? "✌ switches looks" : "✌ switching locked"); }
   else if (k === "r") toggleRec();
   else if (k === "s") snap();
   else if (k === "c") clearArt();
