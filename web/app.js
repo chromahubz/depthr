@@ -35,7 +35,9 @@ const SCHEMA = [
     ["scan", SELECT, "Laser", { off: "Off", depth: "Depth sweep", vertical: "Vertical scanner", contour: "Topo contours" }],
     ["scanCol", COLOR, "Laser colour"], ["scanSpeed", RANGE, "Laser speed", 0, 2, .01], ["scanW", RANGE, "Laser width", .005, .15, .001],
     ["contours", RANGE, "Contours", 4, 80, 1], ["fog", RANGE, "Depth fog", 0, 1, .01], ["fogCol", COLOR, "Fog colour"],
-    ["dof", RANGE, "Depth of field", 0, 1, .01], ["holo", CHECK, "Hologram point cloud"], ["holoBg", CHECK, "Hologram keeps room"],
+    ["dof", RANGE, "Depth of field", 0, 1, .01], ["holo", CHECK, "3D point cloud (orbit with your hand)"],
+    ["holoStyle", SELECT, "Cloud style", { holo: "Hologram", ridge: "Ridgelines", voxel: "Voxel statue", storm: "Particle storm", sand: "Sand sculpture",
+      rain: "Digital rain", lidar: "LiDAR sweep", stars: "Star body", slices: "Depth slices", trio: "Hologram trio" }], ["holoBg", CHECK, "Cloud keeps room"],
     ["holoTint", RANGE, "Holo tint", 0, 1, .01], ["holoSpin", RANGE, "Holo auto-orbit", 0, 1, .01], ["holoDepth", RANGE, "Holo depth", 0, 2, .01]]],
   ["Matte FX", [
     ["world", SELECT, "World", { off: "Real room", stars: "Starfield", desert: "Desert night", crystal: "Crystal cave", synth: "Synthwave", void: "Void" }],
@@ -52,7 +54,7 @@ const D = {
   lantern: false, lanternCol: "#ffa84a", lanternInt: 3.5, lightning: false, boltCol: "#86b8ff", boltInt: 2.2, painter: false, spells: false, spellLife: 6,
   sun: false, sunHand: true, sunCol: "#ffb066", sunInt: 1.6, skyCol: "#4a63c8", skyAmt: .35, shadow: .6, longShadow: false, bg: .35, depth: .45,
   scan: "off", scanCol: "#00ffd0", scanSpeed: .35, scanW: .03, contours: 24, fog: 0, fogCol: "#140a26", dof: 0,
-  holo: false, holoBg: false, holoTint: .75, holoSpin: .35, holoDepth: 1,
+  holo: false, holoStyle: "holo", holoBg: false, holoTint: .75, holoSpin: .35, holoDepth: 1,
   world: "off", ghost: 0, ghostDecay: .93, ghostCol: "#8fb8ff", aura: 0, auraCol: "#ff2bd6", auraCycle: false,
   bloom: .35, chroma: 0, vig: .25, grain: 0, gestures: true, beatWaves: false, audioAmt: 1,
 };
@@ -70,6 +72,15 @@ const PRESETS = [
   ["Topo Map", "contour lines", { scan: "contour", mat: "clay", tint: "#26302e", amb: .3, scanCol: "#4dff7a", contours: 28, spots: false, bloom: .7 }],
   ["Body Scan", "vertical scanner", { scan: "vertical", scanCol: "#ff2050", scanW: .04, amb: .08, spots: false, bloom: .9, chroma: .2, world: "void" }],
   ["Hologram", "orbit with your hand", { holo: true, bloom: 1.1, chroma: .25, grain: .25, spots: false }],
+  ["Ridgelines", "you as a mountain range", { holo: true, holoStyle: "ridge", holoTint: .85, holoDepth: 1.2, bloom: .9, spots: false, vig: .5 }],
+  ["Voxel Statue", "blocky 3D you", { holo: true, holoStyle: "voxel", holoSpin: .5, bloom: .3, spots: false }],
+  ["Particle Storm", "hand + kicks blow you apart", { holo: true, holoStyle: "storm", holoSpin: .2, bloom: 1.2, spots: false, chroma: .15 }],
+  ["Sand Sculpture", "crumbles and reforms", { holo: true, holoStyle: "sand", holoSpin: .25, bloom: .6, spots: false, grain: .15 }],
+  ["Digital Rain", "code-rain body", { holo: true, holoStyle: "rain", bloom: 1.1, spots: false, vig: .45 }],
+  ["LiDAR Sweep", "scanned in 3D", { holo: true, holoStyle: "lidar", holoDepth: 1.3, bloom: .8, spots: false }],
+  ["Star Body", "you as a galaxy", { holo: true, holoStyle: "stars", holoSpin: .45, bloom: 1.4, spots: false }],
+  ["Depth Slices", "stacked glass layers", { holo: true, holoStyle: "slices", holoSpin: .6, holoDepth: 1.1, bloom: .7, spots: false }],
+  ["Hologram Trio", "three of you, turned", { holo: true, holoStyle: "trio", holoSpin: .3, bloom: 1, chroma: .2, grain: .2, spots: false }],
   ["Shadow Play", "hand = side light", { sun: true, sunHand: true, sunCol: "#fff4e6", sunInt: 1.5, skyAmt: .04, spots: false, longShadow: true, shadow: 1, amb: .03, bg: 1, wrap: 0, bloom: .2, depth: .7 }],
   ["Focus Pull", "focus follows finger", { dof: .85, palette: "white", intensity: 2.2, amb: .45 }],
   ["Neon Aura", "glowing outline", { aura: 1.3, auraCycle: true, world: "void", amb: .25, rim: 1, bloom: .9, spots: false }],
@@ -211,6 +222,7 @@ function commonU() {
   i1("uCam", 0); i1("uAux", 1);
   f2("uAuxSize", frame.aw, frame.ah); f1("uAspect", frame.w / frame.h); f1("uTime", (now / 1000) % 3600);
   gl.uniform3f(L("uFlip"), chk("fx") ? -1 : 1, chk("fy") ? -1 : 1, chk("fz") ? -1 : 1);
+  f1("uCut", chk("cut") ? 1 : 0);
 }
 
 // =============================================================== frames from the server
@@ -500,6 +512,7 @@ let lastT = performance.now(), holoYaw = 0, holoPitch = 0, focus = .8, black = 0
 const MATS = { photo: 0, chrome: 1, gold: 2, glass: 3, clay: 4, toon: 5, cloak: 6, thermal: 7 };
 const WORLDS = { off: 0, stars: 1, desert: 2, crystal: 3, synth: 4, void: 5 };
 const SCANS = { off: 0, depth: 1, vertical: 2, contour: 3 };
+const HOLO_STYLES = { holo: 0, ridge: 1, voxel: 2, storm: 3, sand: 4, rain: 5, lidar: 6, stars: 7, slices: 8, trio: 9 };
 function loop() { requestAnimationFrame(loop); if (!BK.on) render(); }
 function render(t = performance.now()) {
   now = t; const dt = Math.max(0, Math.min(100, now - lastT)); lastT = now;
@@ -517,13 +530,17 @@ function render(t = performance.now()) {
     let ty = Math.sin(now * .0004 * (1 + spin * 3)) * .9 * spin, tp = Math.sin(now * .00031) * .25 * spin;
     if (lead) { const c = palmCenter(lead.p); const x = chk("mirror") ? 1 - c[0] : c[0]; ty = (x - .5) * 2.4; tp = (c[1] - .5) * 1.4; }
     holoYaw += (ty - holoYaw) * .08; holoPitch += (tp - holoPitch) * .08;
-    target(F.scene); gl.clearColor(0, .006, .014, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+    target(F.scene); if (chk("cut")) gl.clearColor(0, 0, 0, 1); else gl.clearColor(0, .006, .014, 1); gl.clear(gl.COLOR_BUFFER_BIT);
     use(P.holo); commonU(); bindTex(0, texCam); bindTex(1, texAux);
     gl.uniform2i(L("uGrid"), frame.aw, frame.ah); f1("uDepthH", S.holoDepth); f1("uYaw", holoYaw); f1("uPitch", holoPitch);
-    f1("uBeat", AU.beat * S.audioAmt); f1("uTint", S.holoTint); f1("uHoloBg", S.holoBg ? 1 : 0); f1("uPx", frame.h / frame.ah * 1.35);
+    f1("uBeat", AU.beat * S.audioAmt); f1("uBass", AU.bass * S.audioAmt); f1("uTint", S.holoTint);
+    f1("uHoloBg", S.holoBg && !chk("cut") ? 1 : 0); f1("uPx", frame.h / frame.ah * 1.35);
+    const style = HOLO_STYLES[S.holoStyle] || 0; i1("uStyle", style);
+    const hc = lead ? palmCenter(lead.p) : null; f3("uHandP", hc ? [hc[0], hc[1], 1] : [0, 0, 0]);
     gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
-    gl.bindVertexArray(emptyVao); gl.drawArrays(gl.POINTS, 0, frame.aw * frame.ah);
-    gl.disable(gl.BLEND);
+    if (style === 2) gl.blendEquation(gl.MAX);           // voxels read as solid blocks, not additive mush
+    gl.bindVertexArray(emptyVao); gl.drawArraysInstanced(gl.POINTS, 0, frame.aw * frame.ah, style === 9 ? 3 : 1);
+    gl.blendEquation(gl.FUNC_ADD); gl.disable(gl.BLEND);
   } else {
     target(F.scene); use(P.scene); commonU();
     bindTex(0, texCam); bindTex(1, texAux); bindTex(2, F.plate[F.pi].tex); uploadSpells(); bindTex(3, texSpell);
@@ -771,6 +788,7 @@ addEventListener("keydown", (e) => {
   else if (k === "arrowright") applyPreset(presetIdx + 1, true);
   else if (k === "arrowleft") applyPreset(presetIdx - 1, true);
   else if (k === "m") $("#mirror").click();
+  else if (k === "k") $("#cut").click();
   else if (k === "r") toggleRec();
   else if (k === "s") snap();
   else if (k === "c") clearArt();
@@ -814,7 +832,7 @@ async function bake() {
   if (!BK.clip) { alert("Load or pick a clip first."); return; }
   if (view === 4) document.querySelector('button[data-v="0"]').click();   // split view doubles the height
   const qs = new URLSearchParams({ p: BK.clip, start: +$("#bkin").value || 0, end: +$("#bkout").value || 0, maxw: $("#bksize").value,
-    crf: $("#bkq").value, song: BK.song, tag: (FXS.id && !FXS.id.startsWith("preset-") ? FXS.id : PRESETS[presetIdx][0]).replace(/\W+/g, "") });
+    crf: $("#bkq").value, song: BK.song, alpha: chk("cut") ? $("#bkalpha").value : "", tag: (FXS.id && !FXS.id.startsWith("preset-") ? FXS.id : PRESETS[presetIdx][0]).replace(/\W+/g, "") });
   bkStatus("preparing (decoding the soundtrack, loading the hand tracker)…");
   const meta = await (await fetch("/bake/open?" + qs)).json();
   if (!meta.ok) { bkStatus("✕ " + meta.err); return; }
@@ -840,7 +858,9 @@ async function bake() {
       if (i < meta.start) continue;
       if (cv.width !== meta.ow || cv.height !== meta.oh) { err = `canvas is ${cv.width}×${cv.height}, expected ${meta.ow}×${meta.oh}`; break; }
       if (comp.width !== cv.width || comp.height !== cv.height) { comp.width = cv.width; comp.height = cv.height; }
-      T = performance.now(); cx.clearRect(0, 0, comp.width, comp.height); cx.drawImage(cv, 0, 0); cx.drawImage(ov, 0, 0);
+      T = performance.now(); cx.clearRect(0, 0, comp.width, comp.height);
+      if (!meta.alpha) { cx.fillStyle = "#000"; cx.fillRect(0, 0, comp.width, comp.height); }   // cutout on black for MP4
+      cx.drawImage(cv, 0, 0); cx.drawImage(ov, 0, 0);
       const px = cx.getImageData(0, 0, comp.width, comp.height).data; P.read += performance.now() - T;
       T = performance.now(); const r = await put; P.put += performance.now() - T; if (!r.ok) { err = r.err; break; }
       put = fetch("/bake/put", { method: "POST", body: new Blob([px]) })   // Blob uploads ~4x faster than a typed array here.then((x) => x.json());
@@ -895,4 +915,11 @@ window.__depthr = { fake: [], S, PRESETS, applyPreset, shockwave, get hands() { 
   setView: (v) => { view = v; layout(); }, addSpell: (pts) => pts.forEach((p, i) => spell.push({ x: p[0], y: p[1], z: p[2] ?? .6, t: now, brk: i === 0 })),
   place: (x, y, hue = Math.random()) => placed.push({ x, y, hue, born: now }), audio: AU, fakeHands: (list) => onHands(list),
   get lightCount() { return frame ? buildLights().length : 0; }, FX, FXS, setFx, fxSheet, fxCompileAll, fxBroken, get body() { return body; }, BK, bake, pickClip, refreshClips };
+$("#cut").onchange = (e) => { $("#stage").classList.toggle("cut", e.target.checked); ghostClear = true; fxClear = true;
+  bkLabel(); };
+function bkLabel() {
+  const a = chk("cut") ? $("#bkalpha").value : ""; $("#bkalpha").disabled = !chk("cut");
+  $("#bkgo").textContent = "● Render to " + (a === "webm" ? "WebM (transparent)" : a === "mov" ? "MOV (transparent)" : "MP4");
+}
+$("#bkalpha").onchange = bkLabel;
 buildPanel(); buildFxPanel(); buildBake(); applyPreset(0); pull(); loop();

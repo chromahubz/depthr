@@ -336,7 +336,7 @@ class Handler(BaseHTTPRequestHandler):
                     BAKE.close(cancel=True)
                 PIPE.paused = PIPE.hands.paused = True
                 BAKE = bake.Bake(PIPE, MODELS, g("p"), float(g("start", "0")), float(g("end", "0")),
-                                 int(g("maxw", "1920")), g("song"), g("tag", "fx"), int(g("crf", "17")))
+                                 int(g("maxw", "1920")), g("song"), g("tag", "fx"), int(g("crf", "17")), g("alpha"))
                 return self._json({"ok": True, **BAKE.info()})
             except Exception as e:
                 BAKE = None

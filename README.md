@@ -1,11 +1,11 @@
-# DEPTHR — live DAViD FX with your hands
+﻿# DEPTHR â€” live DAViD FX with your hands
 
-Webcam → Microsoft **DAViD** multi-task model (surface normals + relative depth + soft matte, one pass)
-→ a multi-pass WebGL2 FX engine that lights, re-materials and re-worlds the 2D frame as if it were 3D,
+Webcam â†’ Microsoft **DAViD** multi-task model (surface normals + relative depth + soft matte, one pass)
+â†’ a multi-pass WebGL2 FX engine that lights, re-materials and re-worlds the 2D frame as if it were 3D,
 driven by MediaPipe hand landmarks, gestures and music.
 
 ## Setup
-Needs Windows (Linux works with `python app.py`), an NVIDIA GPU with ~4 GB VRAM (RTX 20xx or newer), Python 3.10–3.12, a webcam,
+Needs Windows (Linux works with `python app.py`), an NVIDIA GPU with ~4 GB VRAM (RTX 20xx or newer), Python 3.10â€“3.12, a webcam,
 and [ffmpeg](https://ffmpeg.org/download.html) on PATH for MP4 renders.
 
 ```
@@ -30,11 +30,11 @@ Double-click **Start Depthr.bat** (opens http://localhost:8790 after the ~30 s m
 .\run.ps1 --source myclip.mp4              # loop a video instead
 .\run.ps1 --device cuda:0,cuda:1           # alternate frames over both GPUs (only helps if GPU 1 is idle)
 ```
-Only one app can hold the webcam — close Chrome tabs using it, OBS, CapCut first.
+Only one app can hold the webcam â€” close Chrome tabs using it, OBS, CapCut first.
 
 ## Film first, FX later (render a clip to MP4)
-Panel → **Film → FX**: load a video (or drop it on the picture). It loops so you can audition presets/effects
-live, then **Render to MP4** processes *every* frame offline — nothing dropped, whatever the FX cost:
+Panel â†’ **Film â†’ FX**: load a video (or drop it on the picture). It loops so you can audition presets/effects
+live, then **Render to MP4** processes *every* frame offline â€” nothing dropped, whatever the FX cost:
 
 - the server decodes each frame, runs DAViD (GPU) and the hand tracker (CPU) in parallel with read-ahead,
   and sends exact RGB pixels; the browser renders at virtual time `i/fps` (trails, particles, auto-cycle and
@@ -44,25 +44,29 @@ live, then **Render to MP4** processes *every* frame offline — nothing dropped
 - start/end seconds, output width (1280 / 1920 / source) and quality (best/high/small); a 0.75 s pre-roll
   lets trails and the clean plate settle before the first written frame
 - FX auto-cycle can also switch **every 4/8/16 kicks**
+- **Only me â€” no background** (`K`): room and worlds vanish, you plus anything glowing around you (aura, wings,
+  particles, point clouds) stay, shown over a checkerboard. Renders then export **with transparency**:
+  WebM VP9 alpha (small; Resolve, CapCut, OBS, browsers) or MOV ProRes 4444 (Premiere, Final Cut, After Effects; big)
 
-Clips go to `data\clips`, renders to `data\renders` (📁 opens it). Speed on the 3060 Ti:
-~15 fps at 720p, ~11 fps at 1080p (a 1-minute clip ≈ 2–3 minutes).
+Clips go to `data\clips`, renders to `data\renders` (ðŸ“ opens it). Speed on the 3060 Ti:
+~15 fps at 720p, ~11 fps at 1080p (a 1-minute clip â‰ˆ 2â€“3 minutes).
 
-## 26 presets (all mixable from the panel)
+## 35 presets (all mixable from the panel)
 | | |
 |---|---|
-| **Light** | Finger Spots (the demo) · Golden Hour (hand = sun) · Shadow Play (hand = side light, long shadows) · Focus Pull (DOF follows finger) |
-| **Materials** | Liquid Chrome · Gold Idol · Glass Ghost · Predator Cloak · Anime Ink · Clay Render · Thermal |
-| **Depth** | Laser Scanner · Topo Map · Body Scan · Hologram (point cloud, orbit with your hand) |
-| **Matte** | Neon Aura · Ghost Trails · Starfield · Desert Night · Crystal Cave · Synthwave |
-| **Magic** | Palm Lantern (open hand = orb, pinch dims) · Lightning Mage (thumb↔index and hand↔hand arcs) · Spellcaster (point to draw glowing trails in 3D) · Light Painter (pinch, carry, release to place lights) |
-| **Music** | Music Video — load a song or use the mic: kicks flash lights, restart the laser, fire shockwaves; bass swells aura/rim |
+| **Light** | Finger Spots (the demo) Â· Golden Hour (hand = sun) Â· Shadow Play (hand = side light, long shadows) Â· Focus Pull (DOF follows finger) |
+| **Materials** | Liquid Chrome Â· Gold Idol Â· Glass Ghost Â· Predator Cloak Â· Anime Ink Â· Clay Render Â· Thermal |
+| **Depth** | Laser Scanner Â· Topo Map Â· Body Scan Â· Hologram (point cloud, orbit with your hand) |
+| **3D clouds** | Ridgelines Â· Voxel Statue Â· Particle Storm (hand + kicks blow you apart) Â· Sand Sculpture (crumbles, reforms) Â· Digital Rain Â· LiDAR Sweep Â· Star Body Â· Depth Slices Â· Hologram Trio â€” all orbit with your hand like Hologram |
+| **Matte** | Neon Aura Â· Ghost Trails Â· Starfield Â· Desert Night Â· Crystal Cave Â· Synthwave |
+| **Magic** | Palm Lantern (open hand = orb, pinch dims) Â· Lightning Mage (thumbâ†”index and handâ†”hand arcs) Â· Spellcaster (point to draw glowing trails in 3D) Â· Light Painter (pinch, carry, release to place lights) |
+| **Music** | Music Video â€” load a song or use the mic: kicks flash lights, restart the laser, fire shockwaves; bass swells aura/rim |
 
-## FX Library — 155 effects on top of any preset
+## FX Library â€” 155 effects on top of any preset
 Each effect is a self-contained shader in `web/fx_*.js` that sees the camera, the relit scene, DAViD normals /
 depth / matte, the clean background plate, both hands (42 landmarks), a body anchor (centroid + head), audio
-(bass/mid/high/kick/beat count) and its **own feedback buffer** (MRT `keep()` state → trails, freezing, melting,
-particles, slit-scan, time bubbles…). Every effect has two named knobs (A/B) + Mix, can feed off the camera or
+(bass/mid/high/kick/beat count) and its **own feedback buffer** (MRT `keep()` state â†’ trails, freezing, melting,
+particles, slit-scan, time bubblesâ€¦). Every effect has two named knobs (A/B) + Mix, can feed off the camera or
 the preset's relit scene, and luminance looks auto-normalise exposure.
 
 | category | count | examples |
@@ -75,25 +79,25 @@ the preset's relit scene, and luminance looks auto-normalise exposure.
 | Audio | 10 | EQ Body, Bass Punch, Beat Strobe, Speaker Cone, Spectrum Crown, Oscilloscope, Stage Beams, Confetti |
 | Stylize | 24 | Oil Paint, Pencil, Watercolor, Engraving, ASCII, CRT, VHS, Game Boy, CMYK, Blueprint, PICO-8, Mondrian, Predator |
 
-The library also has a **Presets** category holding the 26 presets above, so search, shuffle and auto-cycle can switch
+The library also has a **Presets** category holding the 35 presets above, so search, shuffle and auto-cycle can switch
 the base look too (an effect picked after a preset stacks on top of it).
-Browse by category or search; `[` `]` step, `X` shuffle, `0` off, auto-cycle every 4/8/16 s, ✌ steps effects while one is on.
+Browse by category or search; `[` `]` step, `X` shuffle, `0` off, auto-cycle every 4/8/16 s, âœŒ steps effects while one is on.
 Add your own: `fx("Cat", "id", "Name", "knob A", "knob B", \`vec3 fx(vec2 t){ ... }\`)` in any `fx_*.js`.
 
-Gestures: **✌ peace** = next preset · **✊ hold** = blackout · **✊→🖐 burst** = shockwave.
-Keys: `←` `→` presets, `1`–`6` views, `M` mirror, `R` record webm (with song audio), `S` snapshot,
+Gestures: **âœŒ peace** = next preset Â· **âœŠ hold** = blackout Â· **âœŠâ†’ðŸ– burst** = shockwave.
+Keys: `â†` `â†’` presets, `1`â€“`6` views, `M` mirror, `R` record webm (with song audio), `S` snapshot,
 `C` clear spells/placed lights, `B` shockwave, `H` hide panel, `F` fullscreen.
 
 ## How it works
 | piece | file |
 |---|---|
-| ONNX → PyTorch runner: folds shape math, fuses the 24 attention blocks into SDPA, fp16, CUDA graph | `onnx_torch.py` |
+| ONNX â†’ PyTorch runner: folds shape math, fuses the 24 attention blocks into SDPA, fp16, CUDA graph | `onnx_torch.py` |
 | DAViD pre/post-processing on GPU (same as microsoft/DAViD `runtime/utils.py`), packs normals+matte+16-bit depth | `engine.py` |
 | camera/video source (+ dim-room auto gain), MediaPipe hands thread, per-GPU workers, HTTP long-poll server | `app.py` |
 | scene uber-shader (8 materials, 16 spot/omni lights + sun with screen-space shadows, 5 worlds, lasers, fog, spells, orbs), clean-plate, ghost feedback, bloom, post (DOF, aura, shockwaves, chroma), hologram points | `web/shaders.js` |
 | panel/presets, hand tracking + gesture classifier, lightning, painter, spells, audio analysis, recording | `web/app.js` |
 
 Output matches onnxruntime to ~1e-4 mean error (`python test_model.py frame.png --ort`).
-Speed on the 3060 Ti: ~45 ms model, ~20 fps AI; the FX pipeline costs ~2–5 ms/frame and redraws at display rate.
+Speed on the 3060 Ti: ~45 ms model, ~20 fps AI; the FX pipeline costs ~2â€“5 ms/frame and redraws at display rate.
 
 Models live in `data\models` (or `DEPTHR_MODELS`). `onnxruntime` is only needed for the `--ort` check.

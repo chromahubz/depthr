@@ -9,7 +9,7 @@ in vec2 p; out vec2 uv; void main(){ uv = vec2(p.x*.5+.5, .5-p.y*.5); gl_Positio
 const SH_COMMON = `
 precision highp float; precision highp int;
 uniform sampler2D uCam, uAux;
-uniform vec2 uAuxSize; uniform float uAspect, uTime; uniform vec3 uFlip;
+uniform vec2 uAuxSize; uniform float uAspect, uTime, uCut; uniform vec3 uFlip;
 vec2 cy(vec2 t){ return vec2(t.x, clamp(t.y, .5/uAuxSize.y, 1.-.5/uAuxSize.y)); }
 vec4 auxTop(vec2 t){ t = cy(t); return texture(uAux, vec2(t.x, t.y*.5)); }
 vec4 auxBot(vec2 t){ t = cy(t); return texture(uAux, vec2(t.x, .5 + t.y*.5)); }
@@ -320,6 +320,7 @@ void main(){
   }
   col += scanFx(t, d, m);
   if(uFog > 0.) col = mix(col, uFogCol, clamp(pow(1.-d,1.6)*uFog,0.,1.));
+  if(uCut > .5) col *= smoothstep(.12, .55, matteAt(t));   // cutout: room/world gone, glowing magic stays
   if(uSpellN > 1) col += spells(t, d);
   col += orbs(t, d);
   o = vec4(col, 1.);
@@ -428,40 +429,121 @@ void main(){
   col += fbo(uBloom, ts).rgb*uBloomAmt;
   col += ring*vec3(.55,.8,1.)*.5;
   col += uFlash;
-  col = toSrgb(tone(col*uExpo));
+  col = tone(col*uExpo);
+  float glowLin = max(col.r, max(col.g, col.b));
+  col = toSrgb(col);
   vec2 q = uv - .5; col *= 1. - uVig*dot(q,q)*1.8;
-  col += (hash(uv*vec2(1920.,1080.) + fract(uTime)*100.) - .5)*uGrain*.12;
-  o = vec4(col, 1.);
+  float alpha = 1.;
+  if(uCut > .5){
+    // only the character: alpha = body matte, plus anything glowing around it (aura, wings, particles, points)
+    float body = uHolo > .5 ? 0. : smoothstep(.15, .6, matteAt(ts));
+    float glow = smoothstep(.006, .2, glowLin);
+    alpha = max(body, glow);
+  } else col += (hash(uv*vec2(1920.,1080.) + fract(uTime)*100.) - .5)*uGrain*.12;
+  o = vec4(col, alpha);
 }`;
 
 // ------------------------------------------------------------------ hologram point cloud
 const SH_HOLO_VS = `#version 300 es
 ${SH_COMMON}
-uniform ivec2 uGrid; uniform float uDepthH, uYaw, uPitch, uBeat, uTint, uHoloBg, uPx;
-out vec3 vCol; out float vA;
+// one renderer, many 3D looks (uStyle): 0 hologram · 1 ridgelines · 2 voxel statue · 3 particle storm · 4 sand sculpture
+// 5 digital rain · 6 lidar sweep · 7 star body · 8 depth slices · 9 hologram trio (3 instances)
+uniform ivec2 uGrid; uniform float uDepthH, uYaw, uPitch, uBeat, uBass, uTint, uHoloBg, uPx;
+uniform int uStyle; uniform vec3 uHandP;
+out vec3 vCol; out float vA; flat out int vSq;
+vec3 turbo(float x){ x = clamp(x,0.,1.); return clamp(vec3(.13572+x*(4.6154+x*(-42.66+x*(132.13+x*(-152.95+x*59.29)))),
+  .0914+x*(2.1942+x*(4.8430+x*(-14.19+x*(4.2773+x*2.8296)))), .1066+x*(12.642+x*(-60.58+x*(110.36+x*(-89.90+x*27.348))))), 0., 1.); }
+vec3 hue(float h){ return clamp(abs(mod(h*6.+vec3(0.,4.,2.),6.)-3.)-1., 0., 1.); }
 void main(){
   int id = gl_VertexID; int gx = id % uGrid.x, gy = id / uGrid.x;
-  vec2 t = (vec2(gx,gy)+.5)/vec2(uGrid);
+  vSq = 0; vA = 1.;
+  gl_Position = vec4(2.,2.,2.,1.); gl_PointSize = 0.;                                   // = culled unless set below
+  if(uStyle==1 && gy % 5 != 0) return;
+  if(uStyle==2 && (gx % 4 != 0 || gy % 4 != 0)) return;
+  if(uStyle==5 && gx % 2 != 0) return;
+  vec2 cell = vec2(gx,gy);
+  vec2 t = (cell + (uStyle==2 ? 2. : .5))/vec2(uGrid);
   float d = depthAt(t), m = matteAt(t);
-  if(m < .45 && uHoloBg < .5){ gl_Position = vec4(2.,2.,2.,1.); gl_PointSize = 0.; return; }
+  bool bg = m < .45;
+  if(bg && uHoloBg < .5) return;
+  float h = hash(cell*.371 + 3.7);
+  if(uStyle==7 && h > .5) return;                                                       // stars: sparser
   vec3 p = vec3((t.x-.5)*uAspect, -(t.y-.5), (d-.55)*uDepthH);
-  float row = floor(t.y*60.);
-  p.x += (hash(vec2(row, floor(uTime*14.))) - .5)*.12*uBeat*step(.7, hash(vec2(row*3.1, floor(uTime*14.))));
-  float cy = cos(uYaw), sy = sin(uYaw), cp = cos(uPitch), sp = sin(uPitch);
+  vec3 cam = texture(uCam, t).rgb;
+  float lum = dot(cam, vec3(.3,.59,.11));
+  vec3 col; float sz = 1., yaw = uYaw;
+  if(uStyle==1){                                   // ridgelines: one glowing line per few rows, depth = height
+    p.z *= 1.7; sz = .75;
+    col = mix(vec3(.85,.95,1.), cam*1.6, .35*(1.-uTint))*(.35+.65*smoothstep(.15,.75,d)) + uBeat*.25;
+  } else if(uStyle==2){                            // voxel statue: blocky, quantised depth + palette, lit by normals
+    p.z = floor(p.z*12.)/12.; vec3 n = normalAt(t);
+    float sh = .35 + .65*max(dot(n, normalize(vec3(-.5,.55,.7))), 0.);
+    vec3 c = pow(cam, vec3(.75))*1.15 + .04;
+    col = mix(c, floor(c*4.+.5)/4., .6)*sh*1.9; vSq = 1; sz = 4.7;
+  } else if(uStyle==3){                            // particle storm: points blow off the body, hand + kicks push harder
+    float hd = uHandP.z > .5 ? length((t - uHandP.xy)*vec2(uAspect,1.)) : 9.;
+    float push = smoothstep(.3, 0., hd)*.7 + uBeat*.45 + (.5+.5*sin(uTime*.7))*.06;
+    vec3 dir = normalize(vec3(hash2(cell*.13)*2.-1., hash(cell*.29+1.)-.25) + 1e-4);
+    p += dir*push*(.25 + h*.9);
+    p.y += (noise(t*6. + uTime*.8)-.5)*.06*push;
+    float heat = min(push*2.5*h, 1.);
+    col = mix(cam*1.2, mix(vec3(1.,.35,.08), vec3(1.,.9,.6), h)*(.5+lum*1.5), heat); sz = .8 + h*.9;
+  } else if(uStyle==4){                            // sand sculpture: crumbles top-down into a pile, then reforms
+    float ph = fract(uTime/8.);
+    float s = smoothstep(.12, .5, ph)*(1. - smoothstep(.68, .96, ph));
+    float order = (1.-t.y)*.75 + h*.25;
+    float fall = clamp((s*1.35 - order)/.25, 0., 1.);
+    p.y -= fall*fall*1.3; p.x += (h-.5)*fall*.35; p.z += (hash(cell+9.)-.5)*fall*.4;
+    p.y = max(p.y, -.52 + h*.04*fall);
+    col = mix(vec3(1.,.78,.45), cam*1.3, .3*(1.-fall))*(.35+lum*1.1)*(1.+uBeat*.4); sz = .9;
+  } else if(uStyle==5){                            // digital rain: falling bright streaks down every column
+    float sp = .4 + hash(vec2(cell.x, 1.))*1.1;
+    float b = pow(fract(-t.y*1.7 + uTime*sp*.45 + hash(vec2(cell.x, 2.))), 5.);
+    col = vec3(.15,1.,.35)*(.08 + b*1.8)*(.45 + lum*1.4);
+    col = mix(col, vec3(.85,1.,.9), smoothstep(.85,1.,b)); vSq = 1; sz = 1.15;
+  } else if(uStyle==6){                            // lidar: turbo depth colours, a white plane sweeps through you
+    float plane = fract(uTime*.3)*1.8 - .9;
+    float sw = exp(-pow((p.x - plane)*16., 2.));
+    col = turbo(1.15 - d*1.2)*(.25 + .35*lum + uBeat*.3) + vec3(1.)*sw*1.3; sz = .85;
+  } else if(uStyle==7){                            // star body: you as a galaxy, twinkling, swirling on the bass
+    float ang = (h-.5)*(.35 + .25*sin(uTime*.4)) + (h-.5)*uBass*.5;
+    float c = cos(ang), s = sin(ang); p.xz = mat2(c,-s,s,c)*p.xz;
+    float tw = .35 + .65*pow(hash(cell + floor(uTime*7.)), 3.);
+    col = mix(vec3(.55,.65,1.), vec3(1.,.55,.9), hash(cell+5.))*(.5 + lum)*tw*1.4;
+    sz = .55 + 2.6*pow(h*2., 12.);
+  } else if(uStyle==8){                            // depth slices: you as 7 stacked glass layers, pulled apart
+    float L = 7., k = floor(d*L), fr = fract(d*L);
+    p.z = (k/L - .55)*uDepthH*1.25;
+    col = mix(cam*1.1, hue(k/L*.8 + .5)*(.3 + lum), .55*uTint);
+    col += vec3(.6,.9,1.)*smoothstep(.1, 0., min(fr, 1.-fr))*.7;
+  } else if(uStyle==9){                            // trio: three holograms side by side, each turned
+    float ins = float(gl_InstanceID) - 1.;
+    p *= .6; yaw += ins*.6;
+    vec3 tint = ins < -.5 ? vec3(1.,.3,.8) : ins > .5 ? vec3(1.,.75,.25) : vec3(.25,.85,1.);
+    col = mix(cam, tint*(lum*1.4+.15), uTint)*(.65 + .35*step(.5, fract(t.y*float(uGrid.y)*.25 - uTime*3.)));
+  } else {                                         // 0 classic hologram (row glitch on kicks, scanlines)
+    float row = floor(t.y*60.);
+    p.x += (hash(vec2(row, floor(uTime*14.))) - .5)*.12*uBeat*step(.7, hash(vec2(row*3.1, floor(uTime*14.))));
+    vec3 holo = vec3(.25,.85,1.)*(lum*1.4+.15);
+    float scan = .65 + .35*step(.5, fract(t.y*float(uGrid.y)*.25 - uTime*3.));
+    col = mix(cam, holo, uTint)*scan;
+    vA = .55 + .45*hash(vec2(float(id), floor(uTime*20.)))*.3;
+  }
+  float cy = cos(yaw), sy = sin(yaw), cp = cos(uPitch), sp = sin(uPitch);
   p = vec3(cy*p.x + sy*p.z, p.y, -sy*p.x + cy*p.z);
   p = vec3(p.x, cp*p.y - sp*p.z, sp*p.y + cp*p.z);
+  if(uStyle==9) p.x += (float(gl_InstanceID) - 1.)*.5*uAspect;
   vec3 q = p - vec3(0., 0., 1.9);
   float f = 1.75;
   gl_Position = vec4(q.x*f/uAspect, q.y*f, 0., -q.z);
-  gl_PointSize = max(1., uPx*1.9/(-q.z));
-  vec3 cam = texture(uCam, t).rgb;
-  float lum = dot(cam, vec3(.3,.59,.11));
-  vec3 holo = vec3(.25,.85,1.)*(lum*1.4+.15);
-  float scan = .65 + .35*step(.5, fract(t.y*float(uGrid.y)*.25 - uTime*3.));
-  vCol = mix(cam, holo, uTint)*scan*(m < .45 ? .35 : 1.);
-  vA = .55 + .45*hash(vec2(float(id), floor(uTime*20.)))*.3;
+  gl_PointSize = max(1., uPx*1.9*sz/(-q.z));
+  vCol = col*(bg ? .35 : 1.);
 }`;
 const SH_HOLO_FS = `#version 300 es
 precision highp float;
-in vec3 vCol; in float vA; out vec4 o;
-void main(){ vec2 c = gl_PointCoord-.5; float r = dot(c,c); if(r > .25) discard; o = vec4(vCol*vA*(1.-r*2.), 1.); }`;
+in vec3 vCol; in float vA; flat in int vSq; out vec4 o;
+void main(){
+  vec2 c = gl_PointCoord-.5;
+  if(vSq == 1){ float e = max(abs(c.x), abs(c.y)); o = vec4(vCol*vA*(e > .4 ? .55 : 1.), 1.); return; }
+  float r = dot(c,c); if(r > .25) discard; o = vec4(vCol*vA*(1.-r*2.), 1.);
+}`;

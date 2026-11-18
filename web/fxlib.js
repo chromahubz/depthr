@@ -13,10 +13,10 @@ uniform vec2 uTexel; uniform vec4 uBody;
 uniform vec3 uH[42]; uniform float uHA[2]; uniform int uHN;
 const float PI = 3.14159265, TAU = 6.2831853;
 vec3 S(vec2 t){ return fbo(uScene, t).rgb; }
-vec3 C(vec2 t){ return toLin(texture(uCam, t).rgb); }
+vec3 C(vec2 t){ vec3 c = toLin(texture(uCam, t).rgb); return uCut > .5 ? c*smoothstep(.12, .55, matteAt(t)) : c; }
 vec3 SRC(vec2 t){ return uUseScene > .5 ? S(t) : C(t); }
 vec3 PV(vec2 t){ return fbo(uPrev, t).rgb; }
-vec3 PL(vec2 t){ return toLin(fbo(uPlate, t).rgb); }
+vec3 PL(vec2 t){ return uCut > .5 ? vec3(0.) : toLin(fbo(uPlate, t).rgb); }
 float D(vec2 t){ return depthAt(t); }
 float M(vec2 t){ return matteAt(t); }
 float MM(vec2 t){ return smoothstep(.25, .75, matteAt(t)); }

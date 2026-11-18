@@ -6,6 +6,7 @@
 #app{display:grid;grid-template-columns:1fr 340px;height:100%}
 body.hide #app{grid-template-columns:1fr}body.hide aside{display:none}
 #stage{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#000}
+#stage.cut #gl{background:repeating-conic-gradient(#2a2a2e 0 25%,#1a1a1d 0 50%) 0 0/24px 24px}
 #gl,#ov{position:absolute;max-width:100%;max-height:100%}
 #ov{pointer-events:none}
 #hud{position:absolute;left:12px;top:10px;display:flex;gap:6px;flex-wrap:wrap;z-index:2;pointer-events:none}
@@ -73,6 +74,7 @@ kbd{background:#1b1e27;border:1px solid var(--line);border-radius:4px;padding:0 
    <div class="row"><button id="clipprev">▶ Preview clip</button><button id="clipcam">⟲ Back to webcam</button></div>
    <div class="row"><input type="text" id="bkin" placeholder="start s"><input type="text" id="bkout" placeholder="end s"><select id="bksize" title="output width"><option value="1280">1280 w</option><option value="1920" selected>1920 w</option><option value="0">source</option></select><select id="bkq" title="quality"><option value="15">best</option><option value="18" selected>high</option><option value="22">small</option></select></div>
    <div class="row"><label><input type="file" id="bksong" accept="audio/*" style="display:none"><span class="fbtn" id="bksongl">♫ Use a song instead of the clip's sound…</span></label><button id="bksongx" style="flex:0 0 32px" title="use the clip's own sound">✕</button></div>
+   <div class="row"><select id="bkalpha" disabled title="needs 'Only me — no background' ticked"><option value="webm">transparent → WebM (VP9 alpha · small · Resolve/CapCut/OBS)</option><option value="mov">transparent → MOV (ProRes 4444 · Premiere/FCP/AE · big)</option><option value="">no transparency → MP4 on black</option></select></div>
    <div class="row"><button id="bkgo" class="on">● Render to MP4</button><button id="bkcancel" style="flex:0 0 74px">Cancel</button><button id="bkopen" style="flex:0 0 40px" title="open renders folder">📁</button></div>
    <div id="bkbar" style="height:5px;border-radius:3px;background:#ffffff12;overflow:hidden"><b style="display:block;height:100%;width:0;background:var(--acc)"></b></div>
    <div class="note" id="bkstat">Renders use the current preset + effect + knobs. Hands, gestures and audio-reactive effects all work (beats come from the soundtrack). Mirror is switched off while rendering.</div>
@@ -90,6 +92,7 @@ kbd{background:#1b1e27;border:1px solid var(--line);border-radius:4px;padding:0 
    <div class="seg"><button data-v="2">Depth</button><button data-v="3">Matte</button><button data-v="5">Camera</button></div>
    <label class="c"><input type="checkbox" id="mirror" checked> Mirror (selfie)</label>
    <label class="c"><input type="checkbox" id="markers" checked> Hand markers</label>
+   <label class="c" title="Show only you (and the glow around you) on a transparent background — renders can export with alpha. Key K"><input type="checkbox" id="cut"> Only me — no background (K)</label>
   </details>
 
   <div id="sections"></div>

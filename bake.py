@@ -118,7 +118,7 @@ def encoder():
 
 # ------------------------------------------------------------------ bake session
 class Bake:
-    def __init__(self, pipe, models, path, start=0.0, end=0.0, maxw=1920, song="", tag="fx", crf=17):
+    def __init__(self, pipe, models, path, start=0.0, end=0.0, maxw=1920, song="", tag="fx", crf=17, alpha=""):
         self.pipe = pipe
         self.path = str(path)
         self.meta = probe(path)
@@ -160,7 +160,9 @@ class Bake:
             raise RuntimeError(f"only {free / 1e6:.0f} MB free on {RENDERS.drive} - free some space first")
         stem = "".join(ch for ch in Path(self.path).stem if ch.isalnum() or ch in "-_")[:40]
         tag = "".join(ch for ch in tag if ch.isalnum() or ch in "-_")[:40] or "fx"
-        self.out = RENDERS / f"{stem}-{tag}-{time.strftime('%Y%m%d-%H%M%S')}.mp4"
+        self.alpha = alpha if alpha in ("webm", "mov") else ""
+        ext = {"webm": ".webm", "mov": ".mov"}.get(self.alpha, ".mp4")
+        self.out = RENDERS / f"{stem}-{tag}{'-alpha' if self.alpha else ''}-{time.strftime('%Y%m%d-%H%M%S')}{ext}"
         self.crf = crf
         self.ff = None
         self.written = 0
@@ -169,7 +171,7 @@ class Bake:
 
     def info(self):
         return {**self.meta, "first": self.first, "start": self.start, "end": self.end, "ow": self.w, "oh": self.h,
-                "audio": bool(self.bands), "audioSrc": self.audio_src, "out": str(self.out)}
+                "audio": bool(self.bands), "audioSrc": self.audio_src, "out": str(self.out), "alpha": self.alpha}
 
     def _read(self, i):
         if i != self.pos + 1:
@@ -272,12 +274,22 @@ class Bake:
                 ss = self.start / self.fps
                 cmd += ["-ss", f"{ss:.3f}", "-t", f"{(self.end - self.start) / self.fps:.3f}", "-i", self.audio_src,
                         "-map", "0:v", "-map", "1:a:0?", "-c:a", "aac", "-b:a", "320k"]
-            if encoder() == "nvenc":   # GPU encoder: leaves the CPU to the hand tracker
-                cmd += ["-c:v", "h264_nvenc", "-preset", "p6", "-tune", "hq", "-rc", "vbr", "-cq", str(self.crf),
-                        "-b:v", "0", "-profile:v", "high", "-spatial-aq", "1", "-bf", "3"]
+            if self.alpha == "webm":   # transparent, small: VP9 with an alpha plane (Resolve, CapCut, browsers, OBS)
+                if self.audio_src:
+                    cmd[cmd.index("aac")] = "libopus"; cmd[cmd.index("320k")] = "192k"
+                cmd += ["-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p", "-crf", str(self.crf + 12), "-b:v", "0",
+                        "-row-mt", "1", "-deadline", "good", "-cpu-used", "4", "-auto-alt-ref", "0", "-threads", "8",
+                        "-metadata:s:v:0", "alpha_mode=1", str(self.out)]
+            elif self.alpha == "mov":  # transparent, editor-native: ProRes 4444 (Premiere, Final Cut, After Effects) - big files
+                cmd += ["-c:v", "prores_ks", "-profile:v", "4444", "-pix_fmt", "yuva444p10le", "-vendor", "apl0",
+                        "-qscale:v", str({15: 6, 18: 9, 22: 13}.get(self.crf, 9)), str(self.out)]
             else:
-                cmd += ["-c:v", "libx264", "-preset", "medium", "-crf", str(self.crf), "-threads", "6"]
-            cmd += ["-pix_fmt", "yuv420p", "-movflags", "+faststart", str(self.out)]
+                if encoder() == "nvenc":   # GPU encoder: leaves the CPU to the hand tracker
+                    cmd += ["-c:v", "h264_nvenc", "-preset", "p6", "-tune", "hq", "-rc", "vbr", "-cq", str(self.crf),
+                            "-b:v", "0", "-profile:v", "high", "-spatial-aq", "1", "-bf", "3"]
+                else:
+                    cmd += ["-c:v", "libx264", "-preset", "medium", "-crf", str(self.crf), "-threads", "6"]
+                cmd += ["-pix_fmt", "yuv420p", "-movflags", "+faststart", str(self.out)]
             self.log = open(str(self.out) + ".log", "wb")
             self.ff = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=self.log)
         need = self.w * self.h * 4
