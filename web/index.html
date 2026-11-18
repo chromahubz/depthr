@@ -1,0 +1,121 @@
+<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>DEPTHR · live FX</title>
+<style>
+:root{--bg:#050608;--txt:#eef0f5;--dim:#858b99;--line:#ffffff14;--acc:#ff3b4e;--card:#0d0f14}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font:13px/1.4 ui-sans-serif,system-ui,"Segoe UI",sans-serif}
+#app{display:grid;grid-template-columns:1fr 340px;height:100%}
+body.hide #app{grid-template-columns:1fr}body.hide aside{display:none}
+#stage{position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#000}
+#gl,#ov{position:absolute;max-width:100%;max-height:100%}
+#ov{pointer-events:none}
+#hud{position:absolute;left:12px;top:10px;display:flex;gap:6px;flex-wrap:wrap;z-index:2;pointer-events:none}
+.pill{background:#000a;border:1px solid var(--line);backdrop-filter:blur(8px);padding:3px 9px;border-radius:99px;font-size:11.5px;color:var(--dim)}
+.pill b{color:var(--txt);font-weight:600}.pill.rec{background:var(--acc);color:#fff}.pill.hot{color:#fff;border-color:#ffffff40}
+#toast{position:absolute;left:50%;top:18px;transform:translateX(-50%);font-size:22px;font-weight:800;letter-spacing:.28em;text-transform:uppercase;
+ text-shadow:0 0 18px #000,0 0 30px var(--acc);opacity:0;transition:opacity .35s;pointer-events:none;z-index:3;white-space:nowrap}
+#toast.show{opacity:1}
+#wait{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--dim);letter-spacing:.2em;font-size:12px;text-transform:uppercase}
+aside{background:#08090d;border-left:1px solid var(--line);overflow-y:auto;padding:14px 12px 40px}
+h1{margin:0 0 2px;font-size:15px;letter-spacing:.32em;font-weight:800}
+h1 i{font-style:normal;color:var(--acc)}
+.tag{color:var(--dim);font-size:11px;margin-bottom:10px}
+details{background:var(--card);border:1px solid var(--line);border-radius:10px;margin:8px 0;padding:0 10px 9px}
+summary{cursor:pointer;list-style:none;font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);font-weight:700;padding:9px 0 5px}
+.seg{display:grid;grid-auto-flow:column;gap:4px;margin:4px 0}
+#presets{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin:4px 0}
+#presets button{text-align:left;padding:6px 8px;font-size:12px}
+#presets button small{display:block;color:var(--dim);font-size:10px;line-height:1.2}
+#presets button.on small{color:#ffffffcc}
+button,select,input[type=text]{font:inherit;color:var(--txt);background:#161922;border:1px solid var(--line);border-radius:7px;padding:5px 7px;cursor:pointer}
+select{width:100%}
+input[type=text]{cursor:text;width:100%}
+button:hover{border-color:#ffffff38}button.on{background:var(--acc);border-color:transparent;color:#fff;font-weight:600}
+label.s{display:grid;grid-template-columns:92px 1fr 38px;align-items:center;gap:7px;margin:4px 0;color:var(--dim);font-size:12px}
+label.s span{text-align:right;color:var(--txt);font-size:11px;font-variant-numeric:tabular-nums}
+label.k{display:grid;grid-template-columns:92px 1fr;align-items:center;gap:7px;margin:4px 0;color:var(--dim);font-size:12px}
+input[type=range]{width:100%;accent-color:var(--acc)}
+.row{display:flex;gap:6px;align-items:center;margin:5px 0}.row>*{flex:1}
+label.c{display:flex;gap:7px;align-items:center;color:var(--dim);font-size:12px;margin:4px 0;cursor:pointer}
+.note{color:var(--dim);font-size:11px;margin:6px 0 0;line-height:1.5}
+input[type=color]{width:100%;height:24px;border:0;background:none;padding:0;cursor:pointer}
+kbd{background:#1b1e27;border:1px solid var(--line);border-radius:4px;padding:0 4px;font-size:10.5px}
+#meter{height:6px;display:flex;gap:3px;margin:8px 0 2px}
+#meter i{display:block;height:100%;flex:1;border-radius:3px;background:#ffffff12;position:relative;overflow:hidden}
+#meter i b{position:absolute;inset:0;background:var(--acc);transform-origin:left;transform:scaleX(0)}
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}.chips button{padding:3px 8px;border-radius:99px;font-size:11px}
+#fxgrid{display:grid;grid-template-columns:1fr 1fr;gap:3px;max-height:250px;overflow-y:auto;margin:4px 0;padding-right:2px}
+#fxgrid button{text-align:left;font-size:11.5px;padding:4px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fbtn{display:block;text-align:center;border:1px solid var(--line);border-radius:7px;padding:5px;background:#161922;cursor:pointer}
+</style></head><body>
+<div id="app">
+ <div id="stage"><div id="wait">waiting for frames…</div><canvas id="gl"></canvas><canvas id="ov"></canvas><div id="hud"></div><div id="toast"></div></div>
+ <aside>
+  <h1>DEPTH<i>R</i></h1>
+  <div class="tag">DAViD normals · depth · matte · hands → live FX</div>
+
+  <details open><summary>FX Library · <span id="fxname" style="color:var(--txt);text-transform:none;letter-spacing:0">off</span></summary>
+   <div class="row"><input type="text" id="fxq" placeholder="search effects…"><button id="fxshuffle" style="flex:0 0 40px" title="shuffle (X)">🎲</button><button id="fxoff" style="flex:0 0 40px" title="off (0)">✕</button></div>
+   <div id="fxcats" class="chips"></div>
+   <div id="fxgrid"></div>
+   <div class="note" id="fxcount"></div>
+   <label class="s"><b id="fxAl" style="font-weight:400">A</b><input type="range" id="fxA" min="0" max="1" step=".01" value=".5"><span></span></label>
+   <label class="s"><b id="fxBl" style="font-weight:400">B</b><input type="range" id="fxB" min="0" max="1" step=".01" value=".5"><span></span></label>
+   <label class="s">Mix<input type="range" id="fxMix" min="0" max="1" step=".01" value="1"><span></span></label>
+   <label class="c"><input type="checkbox" id="fxscene"> Feed the preset's relit scene (instead of camera)</label>
+   <label class="k">Auto-cycle<select id="fxauto"><option value="0">off</option><option value="4">every 4 s</option><option value="8">every 8 s</option><option value="16">every 16 s</option><option value="-4">every 4 kicks</option><option value="-8">every 8 kicks</option><option value="-16">every 16 kicks</option></select></label>
+   <div class="note"><kbd>[</kbd> <kbd>]</kbd> prev/next · <kbd>X</kbd> shuffle · <kbd>0</kbd> off · ✌ = next effect while one is on</div>
+  </details>
+
+  <details open id="bakebox"><summary>Film → FX · render a clip</summary>
+   <div class="row"><label><input type="file" id="clipfile" accept="video/*" style="display:none"><span class="fbtn">📂 Load clip…</span></label><select id="clipsel"><option value="">— filmed clips —</option></select></div>
+   <div class="note" id="clipinfo">Film yourself first (phone, camera, anything), then load or drop the video here. It plays on loop so you can audition effects; Render processes every frame at full quality.</div>
+   <div class="row"><button id="clipprev">▶ Preview clip</button><button id="clipcam">⟲ Back to webcam</button></div>
+   <div class="row"><input type="text" id="bkin" placeholder="start s"><input type="text" id="bkout" placeholder="end s"><select id="bksize" title="output width"><option value="1280">1280 w</option><option value="1920" selected>1920 w</option><option value="0">source</option></select><select id="bkq" title="quality"><option value="15">best</option><option value="18" selected>high</option><option value="22">small</option></select></div>
+   <div class="row"><label><input type="file" id="bksong" accept="audio/*" style="display:none"><span class="fbtn" id="bksongl">♫ Use a song instead of the clip's sound…</span></label><button id="bksongx" style="flex:0 0 32px" title="use the clip's own sound">✕</button></div>
+   <div class="row"><button id="bkgo" class="on">● Render to MP4</button><button id="bkcancel" style="flex:0 0 74px">Cancel</button><button id="bkopen" style="flex:0 0 40px" title="open renders folder">📁</button></div>
+   <div id="bkbar" style="height:5px;border-radius:3px;background:#ffffff12;overflow:hidden"><b style="display:block;height:100%;width:0;background:var(--acc)"></b></div>
+   <div class="note" id="bkstat">Renders use the current preset + effect + knobs. Hands, gestures and audio-reactive effects all work (beats come from the soundtrack). Mirror is switched off while rendering.</div>
+  </details>
+
+  <details><summary>Presets (base look)</summary>
+   <div id="presets"></div>
+   <div class="note">✌ peace = next preset · ✊ hold = blackout · ✊→🖐 burst = shockwave</div>
+  </details>
+
+  <details><summary>View</summary>
+   <div class="seg">
+    <button data-v="0" class="on">FX</button><button data-v="4">Split</button><button data-v="1">Normals</button>
+   </div>
+   <div class="seg"><button data-v="2">Depth</button><button data-v="3">Matte</button><button data-v="5">Camera</button></div>
+   <label class="c"><input type="checkbox" id="mirror" checked> Mirror (selfie)</label>
+   <label class="c"><input type="checkbox" id="markers" checked> Hand markers</label>
+  </details>
+
+  <div id="sections"></div>
+
+  <details><summary>Audio</summary>
+   <div class="row"><button id="mic">🎙 Mic</button><label><input type="file" id="afile" accept="audio/*" style="display:none"><span class="fbtn">♫ Song…</span></label><button id="astop">■</button></div>
+   <div id="meter"><i><b id="mb"></b></i><i><b id="mm"></b></i><i><b id="mh"></b></i><i><b id="mk"></b></i></div>
+   <div class="note">bass · mid · high · kick. Kicks flash lights, restart the laser and (optionally) fire shockwaves; bass swells aura & rim. Recording includes the song.</div>
+  </details>
+
+  <details><summary>Normals</summary>
+   <label class="c"><input type="checkbox" id="fx"> Flip X</label>
+   <label class="c"><input type="checkbox" id="fy" checked> Flip Y</label>
+   <label class="c"><input type="checkbox" id="fz"> Flip Z</label>
+  </details>
+
+  <details open><summary>Source &amp; capture</summary>
+   <div class="row"><input type="text" id="src" placeholder="auto, a webcam index, or a video path"><button id="srcgo" style="flex:0 0 54px">Use</button></div>
+   <div class="row"><button id="rec">● Record</button><button id="snap">Snapshot</button><button id="clear">Clear art</button></div>
+   <div class="note"><kbd>1</kbd>–<kbd>6</kbd> views · <kbd>←</kbd><kbd>→</kbd> presets · <kbd>M</kbd> mirror · <kbd>R</kbd> record · <kbd>S</kbd> snapshot · <kbd>C</kbd> clear spells &amp; placed lights · <kbd>B</kbd> shockwave · <kbd>H</kbd> panel · <kbd>F</kbd> fullscreen</div>
+  </details>
+ </aside>
+</div>
+<script src="shaders.js"></script>
+<script src="fxlib.js"></script>
+<script src="fx_light.js"></script>
+<script src="fx_depth.js"></script>
+<script src="fx_hands.js"></script>
+<script src="app.js"></script>
+</body></html>
