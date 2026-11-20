@@ -62,7 +62,7 @@ Clips go to `data\clips`, renders to `data\renders` (ðŸ“ opens it). Speed 
 | **Magic** | Palm Lantern (open hand = orb, pinch dims) Â· Lightning Mage (thumbâ†”index and handâ†”hand arcs) Â· Spellcaster (point to draw glowing trails in 3D) Â· Light Painter (pinch, carry, release to place lights) |
 | **Music** | Music Video â€” load a song or use the mic: kicks flash lights, restart the laser, fire shockwaves; bass swells aura/rim |
 
-## FX Library â€” 174 effects on top of any preset
+## FX Library â€” 224 effects on top of any preset
 Each effect is a self-contained shader in `web/fx_*.js` that sees the camera, the relit scene, DAViD normals /
 depth / matte, the clean background plate, both hands (42 landmarks), a body anchor (centroid + head), audio
 (bass/mid/high/kick/beat count) and its **own feedback buffer** (MRT `keep()` state â†’ trails, freezing, melting,
@@ -78,8 +78,8 @@ the preset's relit scene, and luminance looks auto-normalise exposure.
 | Hands | 22 | Force Field, Black Hole, Finger Lasers, Ribbons, Fire Hands, Frost Touch, Light Graffiti, Energy Ball, Hand X-Ray, Time Bubble |
 | Audio | 10 | EQ Body, Bass Punch, Beat Strobe, Speaker Cone, Spectrum Crown, Oscilloscope, Stage Beams, Confetti |
 | Stylize | 24 | Oil Paint, Pencil, Watercolor, Engraving, ASCII, CRT, VHS, Game Boy, CMYK, Blueprint, PICO-8, Mondrian, Predator |
-| Art | 9 | De Stijl, Mondrian Portrait, Boogie Woogie, Bauhaus, Suprematism, Op Art, Kandinsky Rings, Matisse Cutouts, Rothko Fields |
-| Spy Titles | 10 | Barrel Sight, Silhouette Titles, Molten Gold, Silhouette Echoes, Smoke & Neon, Laser Heist, Sniper Scope, High Stakes, Diamond Dust, Split Screen 60s |
+| Art | 35 | De Stijl, Mondrian Portrait/Diamond/Neon/Glass/Glitch/Pulse/Relief/Lines, Boogie Woogie, Bauhaus, Cubist Facets, Futurism, Golden Mosaic, Swirl Brush, Woodblock Print, Op Art, Vasarely Bulge, Memphis 80s, Swiss Poster, Art Deco, Psychedelic Poster, Roman Mosaic, Drip Painting, Rothko Fields |
+| Spy Titles | 34 | Barrel Sight, Opening Dots, Red Iris, Silhouette Titles, Molten Gold, Chrome Agent, Kaleido Titles, Ink in Water, Fire Titles, Underwater Titles, Laser Heist, Sniper Scope, Target Lock, CCTV, Tactical Map, Radar Sweep, Classified Dossier, High Stakes, Roulette, Casino Lights, Venetian Noir, Neon Rain, Bullet Glass, Go-Go 60s, Hypno Spiral |
 
 The library also has a **Presets** category holding the 35 presets above, so search, shuffle and auto-cycle can switch
 the base look too (an effect picked after a preset stacks on top of it).
