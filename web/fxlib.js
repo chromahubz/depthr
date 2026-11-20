@@ -4,7 +4,7 @@
 "use strict";
 const FX = [];          // {id, cat, name, a, b, src}
 const FX_CATS = [];
-function fx(cat, id, name, a, b, src) { FX.push({ id, cat, name, a: a || "A", b: b || "B", src }); if (!FX_CATS.includes(cat)) FX_CATS.push(cat); }
+function fx(cat, id, name, a, b, src) { if (FX.some((f) => f.id === id)) console.warn(`fx: duplicate id "${id}" (${cat} · ${name})`); FX.push({ id, cat, name, a: a || "A", b: b || "B", src }); if (!FX_CATS.includes(cat)) FX_CATS.push(cat); }
 
 const FX_HEAD = `
 uniform sampler2D uScene, uPrev, uPlate;
