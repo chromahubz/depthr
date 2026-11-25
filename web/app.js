@@ -56,7 +56,7 @@ const D = {
   scan: "off", scanCol: "#00ffd0", scanSpeed: .35, scanW: .03, contours: 24, fog: 0, fogCol: "#140a26", dof: 0,
   holo: false, holoStyle: "holo", holoBg: false, holoTint: .75, holoSpin: .35, holoDepth: 1,
   world: "off", ghost: 0, ghostDecay: .93, ghostCol: "#8fb8ff", aura: 0, auraCol: "#ff2bd6", auraCycle: false,
-  bloom: .35, chroma: 0, vig: .25, grain: 0, gestures: true, beatWaves: false, audioAmt: 1,
+  bloom: .35, chroma: 0, vig: .25, grain: 0, gestures: false, beatWaves: false, audioAmt: 1,
 };
 const PRESETS = [
   ["Finger Spots", "the demo", {}],
@@ -141,10 +141,14 @@ function buildPanel() {
   });
 }
 function syncPanel() { for (const k in ctrls) ctrls[k](S[k]); }
-function onParam(k) { if (k === "holo" || k === "world") ghostClear = true; }
+// gestures are a user lock like hand tracking: off by default, kept across presets and reloads
+let userGestures = localStorage.getItem("depthr.gestures") === "1";
+function onParam(k) { if (k === "holo" || k === "world") ghostClear = true;
+  if (k === "gestures") { userGestures = S.gestures; localStorage.setItem("depthr.gestures", userGestures ? "1" : "0"); } }
 function applyPreset(i, announce) {
   presetIdx = (i + PRESETS.length) % PRESETS.length;
   Object.assign(S, D, PRESETS[presetIdx][2]);
+  S.gestures = userGestures;
   syncPanel();
   document.querySelectorAll("#presets button").forEach((b, j) => b.classList.toggle("on", j === presetIdx));
   ghostClear = true;
@@ -702,6 +706,7 @@ function fxCompileAll() { const bad = {}; for (const f of FX) { if (f.preset != 
 
 // =============================================================== overlay: markers, bolts, labels
 function scr(x, y) { const H = view === 4 ? ov.height / 2 : ov.height; return [(chk("mirror") ? 1 - x : x) * ov.width, y * H]; }
+let cleanShot = false;   // set while a snapshot redraws the overlay without markers
 const G_ICON = { fist: "✊", open: "🖐", peace: "✌", point: "☝", pinch: "🤏" };
 function drawOverlay() {
   octx.clearRect(0, 0, ov.width, ov.height);
@@ -719,7 +724,7 @@ function drawOverlay() {
     }
   }
   octx.restore();
-  if (!chk("markers") || S.holo || BK.on) return;
+  if (!chk("markers") || S.holo || BK.on || recorder || cleanShot) return;   // preview aid only: never in recordings or snapshots
   octx.lineWidth = 2 * s; octx.strokeStyle = "rgba(255,255,255,.85)"; octx.fillStyle = "rgba(255,255,255,.9)";
   octx.font = `${Math.round(20 * s)}px system-ui`;
   for (const h of hands) {
@@ -774,10 +779,10 @@ function toggleRec() {
   recorder.onstop = () => { live = false; dl(new Blob(chunks, { type: "video/webm" }), `depthr-${stamp()}.webm`); recorder = null; $("#rec").classList.remove("on"); };
   recorder.start(250); $("#rec").classList.add("on");
 }
-function snap() { const c = document.createElement("canvas"); c.width = cv.width; c.height = cv.height; const x = c.getContext("2d"); x.drawImage(cv, 0, 0); x.drawImage(ov, 0, 0); c.toBlob((b) => dl(b, `depthr-${stamp()}.png`), "image/png"); }
+function snap() { cleanShot = true; drawOverlay(); cleanShot = false; const c = document.createElement("canvas"); c.width = cv.width; c.height = cv.height; const x = c.getContext("2d"); x.drawImage(cv, 0, 0); x.drawImage(ov, 0, 0); c.toBlob((b) => dl(b, `depthr-${stamp()}.png`), "image/png"); }
 function clearArt() { spell = []; placed = []; carry = null; ghostClear = true; toast("cleared"); }
 // these two are user locks, not look settings: presets never touch them, and they survive a reload
-for (const id of ["htrack", "gswitch"]) {
+for (const id of ["htrack", "gswitch", "markers"]) {
   const el = $("#" + id), v = localStorage.getItem("depthr." + id);
   if (v != null) el.checked = v === "1";
   el.addEventListener("change", () => localStorage.setItem("depthr." + id, el.checked ? "1" : "0"));
