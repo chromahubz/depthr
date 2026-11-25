@@ -363,6 +363,12 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 os.startfile(str(bake.RENDERS))
             return self._json({"ok": True})
+        if u.path == "/favs":
+            try:
+                data = json.loads(FAVS_FILE.read_text(encoding="utf-8")) if FAVS_FILE.is_file() else {"version": 1, "favs": []}
+            except Exception as e:
+                return self._json({"ok": False, "err": f"{FAVS_FILE} is not valid JSON: {e}", "favs": []}, 500)
+            return self._json({"ok": True, "path": str(FAVS_FILE), **data})
         if u.path == "/hands":
             PIPE.hands.enabled = q.get("on", ["1"])[0] == "1"
             return self._send(200, b'{"ok":true}', "application/json")
@@ -392,6 +398,21 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True})
             except Exception as e:
                 return self._json({"ok": False, "err": str(e)}, 500)
+        if u.path == "/favs":   # whole favorites list as JSON; written atomically so a crash never leaves half a file
+            if n > 2 << 20:
+                _drain(self.rfile, n)
+                return self._json({"ok": False, "err": "favorites too large"}, 413)
+            try:
+                data = json.loads(self.rfile.read(n))
+                if not isinstance(data.get("favs"), list):
+                    raise ValueError("missing favs list")
+                FAVS_FILE.parent.mkdir(parents=True, exist_ok=True)
+                tmp = FAVS_FILE.with_suffix(".tmp")
+                tmp.write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
+                os.replace(tmp, FAVS_FILE)
+                return self._json({"ok": True, "path": str(FAVS_FILE), "n": len(data["favs"])})
+            except Exception as e:
+                return self._json({"ok": False, "err": str(e)}, 400)
         if u.path == "/upload":
             raw = parse_qs(u.query).get("name", ["clip.mp4"])[0]
             stem, ext = os.path.splitext(os.path.basename(raw))
@@ -434,6 +455,7 @@ def _drain(f, n):
 
 
 SHOTS = Path(os.environ.get("DEPTHR_SHOTS", bake.HOME / "shots"))
+FAVS_FILE = Path(os.environ.get("DEPTHR_FAVS", bake.HOME / "favorites.json"))
 BAKE = None
 
 

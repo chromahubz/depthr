@@ -63,6 +63,8 @@ Clips go to `data\clips`, renders to `data\renders` (ðŸ“ opens it). Speed 
 | **Music** | Music Video â€” load a song or use the mic: kicks flash lights, restart the laser, fire shockwaves; bass swells aura/rim |
 
 ## FX Library â€” 280 effects on top of any preset
+
+**Favorites:** click ☆ next to the search box (or press `L`) to star the current effect together with its A/B/Mix knobs; `Shift+L` re-saves the knobs. Starred effects get their own **★ Favorites** tab, and picking one restores its knobs. The list is saved to `favorites.json` in `DEPTHR_HOME` (override with `DEPTHR_FAVS`), with a copy in the browser in case the server is down.
 Each effect is a self-contained shader in `web/fx_*.js` that sees the camera, the relit scene, DAViD normals /
 depth / matte, the clean background plate, both hands (42 landmarks), a body anchor (centroid + head), audio
 (bass/mid/high/kick/beat count) and its **own feedback buffer** (MRT `keep()` state â†’ trails, freezing, melting,

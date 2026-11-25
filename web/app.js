@@ -640,14 +640,48 @@ function runFx(dt) {
   quad(); F.si = nx;
   return true;
 }
+// favorites: ⭐ an effect together with its knobs (A/B/Mix/scene). Saved to favorites.json in DEPTHR_HOME through
+// the server, with a localStorage copy so nothing is lost if the server is down. Picking a favorite restores its knobs.
+let FAVS = [], favSaveT = 0;
+const favOf = (id) => FAVS.find((f) => f.id === id);
+async function loadFavs() {
+  try { const r = await (await fetch("/favs", { cache: "no-store" })).json(); if (!Array.isArray(r.favs)) throw 0; FAVS = r.favs;
+    if (!r.ok) toast("favorites file unreadable, see console"), console.warn(r.err); }
+  catch { try { FAVS = JSON.parse(localStorage.getItem("depthr.favs") || "[]"); } catch { FAVS = []; } }
+  favUi(); if (FXS.cat === "★") fillFxGrid();
+}
+function saveFavs() {
+  localStorage.setItem("depthr.favs", JSON.stringify(FAVS)); clearTimeout(favSaveT);
+  favSaveT = setTimeout(() => fetch("/favs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version: 1, favs: FAVS }) })
+    .then((r) => r.json()).then((r) => { if (!r.ok) toast("favorites not saved: " + r.err); })
+    .catch(() => toast("favorites kept in the browser only (server offline)")), 250);
+}
+function toggleFav(update) {
+  if (!FXS.id) { toast("pick an effect first"); return; }
+  const def = FX.find((f) => f.id === FXS.id); if (!def) return;
+  const cur = favOf(FXS.id), entry = { id: FXS.id, name: def.name, cat: def.cat, a: FXS.a, b: FXS.b, mix: FXS.mix, scene: FXS.scene, at: new Date().toISOString().slice(0, 19) };
+  if (cur && update) { Object.assign(cur, entry); toast("⭐ knobs saved · " + def.name); }
+  else if (cur) { FAVS = FAVS.filter((f) => f !== cur); toast("removed from favorites"); }
+  else { FAVS.push(entry); toast("⭐ " + def.name); }
+  saveFavs(); favUi(); fillFxGrid();
+}
+function favUi() {
+  const on = !!favOf(FXS.id), b = $("#fxfav"); b.textContent = on ? "★" : "☆"; b.classList.toggle("on", on);
+  const chip = document.querySelector('#fxcats button[data-cat="★"]'); if (chip) chip.textContent = `★ Favorites ${FAVS.filter((f) => FX.some((x) => x.id === f.id)).length}`;
+}
+function setKnob(k, v) { const el = $("#fx" + k); el.value = v; el.oninput(); }
 function fxList() {
   const q = FXS.q.toLowerCase();
+  if (FXS.cat === "★") return FAVS.map((v) => FX.find((f) => f.id === v.id)).filter((f) => f && (!q || f.name.toLowerCase().includes(q) || f.cat.toLowerCase().includes(q)));
   return FX.filter((f) => (FXS.cat === "All" || f.cat === FXS.cat) && (!q || f.name.toLowerCase().includes(q) || f.cat.toLowerCase().includes(q)));
 }
 function setFx(id, announce) {
   FXS.id = id; fxClear = true; FXS.lastSwitch = now;
   const def = FX.find((f) => f.id === id);
   if (def && def.preset != null) applyPreset(def.preset);
+  const fv = favOf(id);
+  if (fv && def && def.preset == null) { setKnob("A", fv.a); setKnob("B", fv.b); setKnob("Mix", fv.mix); $("#fxscene").checked = FXS.scene = !!fv.scene; }
+  favUi();
   $("#fxAl").textContent = def ? def.a : "A"; $("#fxBl").textContent = def ? def.b : "B";
   document.querySelectorAll("#fxgrid button").forEach((b) => b.classList.toggle("on", b.dataset.id === id));
   const on = document.querySelector(`#fxgrid button[data-id="${id}"]`); if (on) on.scrollIntoView({ block: "nearest" });
@@ -669,7 +703,7 @@ function addPresetsToLibrary() {
 function buildFxPanel() {
   addPresetsToLibrary();
   const cats = $("#fxcats");
-  ["All", ...FX_CATS].forEach((c) => { const b = document.createElement("button"); b.textContent = c === "All" ? `All ${FX.length}` : `${c} ${FX.filter((f) => f.cat === c).length}`; b.dataset.cat = c;
+  ["All", "★", ...FX_CATS].forEach((c) => { const b = document.createElement("button"); b.textContent = c === "All" ? `All ${FX.length}` : c === "★" ? "★ Favorites 0" : `${c} ${FX.filter((f) => f.cat === c).length}`; b.dataset.cat = c;
     b.onclick = () => { FXS.cat = c; cats.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); fillFxGrid(); }; cats.appendChild(b); });
   cats.firstChild.classList.add("on");
   $("#fxq").oninput = (e) => { FXS.q = e.target.value; fillFxGrid(); };
@@ -679,11 +713,12 @@ function buildFxPanel() {
   $("#fxauto").onchange = (e) => { FXS.auto = +e.target.value; FXS.lastSwitch = now; };
   $("#fxoff").onclick = () => setFx("", false);
   $("#fxshuffle").onclick = () => fxStep(1, true);
+  $("#fxfav").onclick = (e) => toggleFav(e.shiftKey);
   fillFxGrid();
 }
 function fillFxGrid() {
   const g = $("#fxgrid"); g.innerHTML = "";
-  for (const f of fxList()) { const b = document.createElement("button"); b.dataset.id = f.id; b.textContent = f.name; b.title = f.desc ? `${f.cat} · ${f.desc}` : f.cat; if (f.preset != null) b.classList.add("pre");
+  for (const f of fxList()) { const b = document.createElement("button"); b.dataset.id = f.id; b.textContent = (favOf(f.id) ? "★ " : "") + f.name; b.title = f.desc ? `${f.cat} · ${f.desc}` : f.cat; if (f.preset != null) b.classList.add("pre");
     if (f.id === FXS.id) b.classList.add("on"); b.onclick = () => setFx(FXS.id === f.id ? "" : f.id); g.appendChild(b); }
   $("#fxcount").textContent = `${fxList().length} shown`;
 }
@@ -805,6 +840,7 @@ addEventListener("keydown", (e) => {
   else if (k === "g") { $("#gswitch").click(); toast(chk("gswitch") ? "✌ switches looks" : "✌ switching locked"); }
   else if (k === "r") toggleRec();
   else if (k === "s") snap();
+  else if (k === "l" || k === "*") toggleFav(e.shiftKey);
   else if (k === "c") clearArt();
   else if (k === "b") { const h = hands.find((x) => x.a > .5); const c = h ? palmCenter(h.p) : [.5, .45]; shockwave(c[0], c[1], 1); }
   else if (k === "h") { document.body.classList.toggle("hide"); setTimeout(layout, 30); }
@@ -936,4 +972,4 @@ function bkLabel() {
   $("#bkgo").textContent = "● Render to " + (a === "webm" ? "WebM (transparent)" : a === "mov" ? "MOV (transparent)" : "MP4");
 }
 $("#bkalpha").onchange = bkLabel;
-buildPanel(); buildFxPanel(); buildBake(); applyPreset(0); pull(); loop();
+buildPanel(); buildFxPanel(); buildBake(); applyPreset(0); loadFavs(); pull(); loop();
