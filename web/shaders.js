@@ -377,7 +377,7 @@ const SH_POST = `#version 300 es
 ${SH_COMMON}
 in vec2 uv; out vec4 o;
 uniform sampler2D uScene, uGhost, uBloom;
-uniform int uView; uniform bool uMirror; uniform float uHolo;
+uniform int uView; uniform bool uMirror; uniform float uHolo, uFxOn;
 uniform float uDof, uFocus, uAura, uAuraPulse, uGhostAmt, uBloomAmt, uChroma, uVig, uGrain, uFlash, uExpo;
 uniform vec3 uAuraCol; uniform vec4 uWaves[4]; uniform vec2 uTexel;
 vec3 sc(vec2 t){ return fbo(uScene, t).rgb; }
@@ -437,7 +437,8 @@ void main(){
   if(uCut > .5){
     // only the character: alpha = body matte, plus anything glowing around it (aura, wings, particles, points)
     float body = uHolo > .5 ? 0. : smoothstep(.15, .6, matteAt(ts));
-    float glow = smoothstep(.006, .2, glowLin);
+    // library effects paint their own backgrounds, so brightness can't tell "glow" from "room": use the body only
+    float glow = uFxOn > .5 ? 0. : smoothstep(.006, .2, glowLin);
     alpha = max(body, glow);
   } else col += (hash(uv*vec2(1920.,1080.) + fract(uTime)*100.) - .5)*uGrain*.12;
   o = vec4(col, alpha);

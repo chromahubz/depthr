@@ -143,7 +143,8 @@ kbd{display:inline-block;min-width:17px;text-align:center;background:#161922;bor
 .tlbar .grow{flex:1}
 .tlbar button{min-height:30px;white-space:nowrap;flex:none}
 #tl{container-type:inline-size}
-@container (max-width: 760px){ .tlbar button:not(.ib){font-size:0;gap:0;width:32px;padding:0} .tlbar button:not(.ib) .ic{width:16px;height:16px} .zoom{width:70px} #tltime{min-width:0} }
+.zoom{flex:none}
+@container (max-width: 760px){ .tlbar > button:not(.ib){font-size:0;gap:0;width:32px;padding:0} .tlbar > button:not(.ib) .ic{width:16px;height:16px} .zoom{width:70px} #tltime{min-width:0} }
 #tltime{font-variant-numeric:tabular-nums;font-size:12px;color:var(--dim);min-width:118px;padding:0 4px}#tltime b{color:var(--txt);font-weight:600}
 .recdot{color:#fff;background:var(--acc);border-radius:99px;padding:1px 8px;margin-left:6px;font-size:10.5px;font-weight:600;animation:blink 1.2s infinite}
 @keyframes blink{50%{opacity:.55}}
@@ -179,7 +180,23 @@ kbd{display:inline-block;min-width:17px;text-align:center;background:#161922;bor
 #tlhead::before{content:"";position:absolute;left:-5px;top:0;width:12px;height:12px;background:#fff;clip-path:polygon(0 0,100% 0,100% 55%,50% 100%,0 55%)}
 .tlfoot{display:flex;justify-content:space-between;gap:12px;padding:5px 12px 8px;font-size:11px;color:var(--faint);min-height:26px}
 .tlfoot b{color:var(--dim);font-weight:600}.tlfoot a{color:var(--acc2)}
-#tlstat{white-space:nowrap}#tlstat .ic{display:inline-block;width:12px;height:12px;vertical-align:-2px}
+#tlstat{white-space:nowrap}
+.pill.src{color:var(--txt);border-color:#ffffff30}
+#editing{display:flex;align-items:center;gap:8px;margin:0 0 10px;padding:8px 8px 8px 11px;border-radius:9px;background:var(--accbg);border:1px solid #ff3b4e55;font-size:12px;color:var(--txt)}
+#editing[hidden]{display:none}#editing span{flex:1;line-height:1.35}#editing small{display:block;color:var(--dim);font-size:10.5px}
+#editing button{flex:0 0 26px!important;width:26px;min-height:26px;background:transparent;border-color:transparent}
+#tlexp{position:absolute;right:12px;bottom:calc(100% + 6px);width:330px;background:#12151c;border:1px solid var(--line2);border-radius:12px;padding:12px 14px;box-shadow:0 14px 44px #000b;z-index:6}
+#tlexp .h{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:650;color:var(--txt);margin-bottom:6px}
+#tlexp .k2{display:grid;grid-template-columns:88px 1fr;align-items:center;gap:10px;margin:8px 0;color:var(--dim);font-size:12px}
+#tlexp .fbtn{justify-content:flex-start}
+#tlmenu .it img{width:46px;height:26px;object-fit:cover;border-radius:4px;flex:none;background:#000}
+#drop{position:fixed;inset:0;z-index:60;display:flex;gap:16px;padding:28px;background:#05060acc;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+#drop[hidden]{display:none}
+#drop .zone{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border:2px dashed #ffffff33;border-radius:18px;color:var(--dim);transition:border-color .15s,background .15s}
+#drop .zone .ic{width:34px;height:34px;color:var(--txt)}#drop .zone b{color:var(--txt);font-size:17px;font-weight:650}#drop .zone span{font-size:12px}
+#drop .zone.hot{border-color:var(--acc);background:#ff3b4e14;color:var(--txt)}
+#drop .zone[data-drop="timeline"]{display:none}#drop.two .zone[data-drop="timeline"]{display:flex}
+#drop .foot{position:absolute;left:0;right:0;bottom:10px;text-align:center;font-size:11px;color:var(--faint)}#tlstat .ic{display:inline-block;width:12px;height:12px;vertical-align:-2px}
 
 /* scrollbars */
 *{scrollbar-width:thin;scrollbar-color:#ffffff1f transparent}
@@ -189,6 +206,11 @@ kbd{display:inline-block;min-width:17px;text-align:center;background:#161922;bor
 ::-webkit-scrollbar-button{display:none;height:0;width:0}::-webkit-scrollbar-corner{background:transparent}
 .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--faint)}.dot.on{background:var(--acc);box-shadow:0 0 6px var(--acc)}
 </style></head><body>
+<div id="drop" hidden>
+ <div class="zone" data-drop="preview"><i data-i="eye"></i><b>Preview</b><span>Loop it in the picture (Film to FX)</span></div>
+ <div class="zone" data-drop="timeline"><i data-i="timeline"></i><b>Add to timeline</b><span>Every video goes on the end of the edit</span></div>
+ <div class="foot">Audio files become the song</div>
+</div>
 <div id="app">
  <div id="main">
  <div id="stage"><div id="wait">waiting for frames…</div><canvas id="gl"></canvas><canvas id="ov"></canvas><div id="hud"></div><div id="toast"></div></div>
@@ -198,7 +220,10 @@ kbd{display:inline-block;min-width:17px;text-align:center;background:#161922;bor
    <div id="tltime"></div>
    <i class="sep"></i>
    <button id="tladd" data-i="plus" title="Add a filmed clip or upload one">Add clip</button>
-   <button id="tlrec" data-i="record" title="Record the webcam (raw, no FX) straight onto the timeline">Rec camera</button>
+   <button id="tlrec" data-i="record" title="Record a clip: the raw webcam (no FX) saved to your clips and added to the timeline">Record clip</button>
+   <i class="sep"></i>
+   <button id="tlundo" class="ib" data-i="undo" title="Undo (Ctrl+Z)"></button>
+   <button id="tlredo" class="ib" data-i="redo" title="Redo (Ctrl+Shift+Z)"></button>
    <i class="sep"></i>
    <button id="tlsplit" class="ib" data-i="scissors" title="Split at the playhead (Ctrl+B)"></button>
    <button id="tldup" class="ib" data-i="copy" title="Duplicate clip (Ctrl+D)"></button>
@@ -206,8 +231,18 @@ kbd{display:inline-block;min-width:17px;text-align:center;background:#161922;bor
    <button id="tlall" class="ib" data-i="wand" title="Give every clip the selected clip's look"></button>
    <div class="grow"></div>
    <label class="zoom" title="Zoom (Ctrl + mouse wheel)"><input type="range" id="tlzoom" min="8" max="240" step="1" value="60"></label>
-   <button id="tlexport" class="primary" data-i="render" title="Render every clip with its own look and join them into one MP4 (size, quality and song from Film to FX)">Export</button>
+   <button id="tlexport" class="primary" data-i="render" title="Render every clip with its own look and join them into one file">Export</button>
    <div id="tlmenu" hidden></div>
+   <div id="tlexp" hidden>
+    <div class="h">Export timeline</div>
+    <label class="k">Size<select id="txsize"><option value="1280">1280 wide</option><option value="1920">1920 wide</option><option value="0">Like the first clip</option></select></label>
+    <label class="k">Quality<select id="txq"><option value="15">Best</option><option value="18">High</option><option value="22">Small</option></select></label>
+    <div class="k2"><span>Song</span><div class="row" style="margin:0"><label class="fbtn" style="flex:1"><input type="file" id="txsongf" accept="audio/*" hidden><span id="txsong">Each clip's own sound</span></label><button id="txsongx" class="ib" data-i="x" title="Use each clip's own sound"></button></div></div>
+    <label class="k">Transparency<select id="txalpha"><option value="">Off · MP4</option><option value="webm">WebM (VP9 alpha)</option><option value="mov">MOV (ProRes 4444)</option></select></label>
+    <div class="note" id="txalphanote"></div>
+    <div class="note">Every clip is letterboxed to the first clip's shape and frame rate. A song plays over the whole edit and drives the audio-reactive effects.</div>
+    <div class="row" style="margin-top:10px"><button id="txgo" class="primary" data-i="render">Export</button></div>
+   </div>
   </div>
   <div id="tlscroll"><div id="tlruler"></div><div id="tltrack"></div><div id="tlhead"></div></div>
   <div class="tlfoot"><span id="tlsel"></span><span id="tlstat"></span></div>
@@ -217,6 +252,7 @@ kbd{display:inline-block;min-width:17px;text-align:center;background:#161922;bor
   <div class="brand"><h1>DEPTH<i>R</i></h1><span class="tag">live depth FX</span><button id="tltoggle" class="ib" data-i="timeline" title="Timeline editor (E)"></button></div>
 
   <details open><summary data-i="sparkle">Effects <span id="fxname">off</span></summary>
+   <div id="editing" hidden><span id="editingtxt"></span><button id="editingx" class="ib" data-i="x" title="Stop styling this clip (Esc)"></button></div>
    <div class="row"><div class="search" data-i="search"><input type="text" id="fxq" placeholder="Search effects"></div>
     <button id="fxfav" class="ib" data-i="star" title="Favorite this effect with its knobs (L) · Shift-click or Shift+L re-saves the knobs"></button>
     <button id="fxshuffle" class="ib" data-i="shuffle" title="Shuffle (X)"></button>
@@ -233,10 +269,11 @@ kbd{display:inline-block;min-width:17px;text-align:center;background:#161922;bor
   </details>
 
   <details open id="bakebox"><summary data-i="film">Film to FX</summary>
-   <div class="row"><label><input type="file" id="clipfile" accept="video/*" style="display:none"><span class="fbtn" data-i="upload">Load clip</span></label><select id="clipsel"><option value="">Filmed clips</option></select></div>
+   <div class="row"><label><input type="file" id="clipfile" accept="video/*,audio/*" multiple style="display:none"><span class="fbtn" data-i="upload">Load clips</span></label><select id="clipsel"><option value="">Filmed clips</option></select></div>
    <div class="note" id="clipinfo">Film yourself first (phone, camera, anything), then load or drop the video here. It loops so you can audition effects; Render processes every frame at full quality.</div>
    <div class="row"><button id="clipprev" data-i="play">Preview clip</button><button id="clipcam" data-i="video">Webcam</button></div>
    <div class="row"><input type="text" id="bkin" placeholder="Start s"><input type="text" id="bkout" placeholder="End s"><select id="bksize" title="Output width"><option value="1280">1280 w</option><option value="1920" selected>1920 w</option><option value="0">Source</option></select><select id="bkq" title="Quality"><option value="15">Best</option><option value="18" selected>High</option><option value="22">Small</option></select></div>
+   <div class="row"><button id="bk2tl" data-i="timeline" title="Put this clip (Start–End range) on the timeline">Add to timeline</button></div>
    <div class="row"><label><input type="file" id="bksong" accept="audio/*" style="display:none"><span class="fbtn" id="bksongl" data-i="music">Use a song instead of the clip's sound</span></label><button id="bksongx" class="ib" data-i="x" title="Use the clip's own sound"></button></div>
    <div class="row"><select id="bkalpha" disabled title="Needs 'Only me, no background' (View)"><option value="webm">Transparent · WebM (VP9 alpha, small · Resolve / CapCut / OBS)</option><option value="mov">Transparent · MOV (ProRes 4444 · Premiere / FCP / AE)</option><option value="">No transparency · MP4 on black</option></select></div>
    <div class="row"><button id="bkgo" class="primary" data-i="render">Render to MP4</button><button id="bkcancel" style="flex:0 0 76px">Cancel</button><button id="bkopen" class="ib" data-i="folder" title="Open renders folder"></button></div>
@@ -289,8 +326,8 @@ kbd{display:inline-block;min-width:17px;text-align:center;background:#161922;bor
 
   <details open><summary data-i="camera">Source &amp; capture</summary>
    <div class="row"><input type="text" id="src" placeholder="auto, a webcam index, or a video path"><button id="srcgo" style="flex:0 0 58px">Use</button></div>
-   <div class="row"><button id="rec" data-i="record">Record</button><button id="snap" data-i="camera">Snapshot</button><button id="clear" data-i="eraser">Clear</button></div>
-   <div class="hint"><span><kbd>1</kbd>–<kbd>6</kbd> views</span><span><kbd>←</kbd><kbd>→</kbd> presets</span><span><kbd>M</kbd> mirror</span><span><kbd>R</kbd> record</span><span><kbd>S</kbd> snapshot</span><span><kbd>C</kbd> clear</span><span><kbd>B</kbd> shockwave</span><span><kbd>H</kbd> panel</span><span><kbd>F</kbd> fullscreen</span></div>
+   <div class="row"><button id="rec" data-i="record" title="Record the screen with effects (WebM download) · R">Record output</button><button id="snap" data-i="camera">Snapshot</button><button id="clear" data-i="eraser">Clear</button></div>
+   <div class="hint"><span><kbd>1</kbd>–<kbd>6</kbd> views</span><span><kbd>←</kbd><kbd>→</kbd> presets</span><span><kbd>M</kbd> mirror</span><span><kbd>R</kbd> record output</span><span><kbd>E</kbd> timeline</span><span><kbd>S</kbd> snapshot</span><span><kbd>C</kbd> clear</span><span><kbd>B</kbd> shockwave</span><span><kbd>H</kbd> panel</span><span><kbd>F</kbd> fullscreen</span></div>
   </details>
  </aside>
 </div>
@@ -306,5 +343,6 @@ kbd{display:inline-block;min-width:17px;text-align:center;background:#161922;bor
 <script src="fx_marianne.js"></script>
 <script src="fx_marianne2.js"></script>
 <script src="app.js"></script>
+<script src="media.js"></script>
 <script src="timeline.js"></script>
 </body></html>

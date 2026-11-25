@@ -49,15 +49,22 @@ Only one app can hold the webcam â€” close Chrome tabs using it, OBS, CapCu
 ## Timeline editor (several clips, a different look on each)
 Open it with the timeline button at the top of the panel, or press `E`. It docks under the picture, CapCut-style.
 
-- **Add clip** picks a filmed clip or uploads one (or drop videos on the timeline). **Rec camera** records the raw
-  webcam (no FX) straight onto the end of the timeline, so you can film, cut and style afterwards.
-- **Select** a clip and change the preset, effect or A/B/Mix in the panel: the clip keeps that look. The wand
-  button gives every clip the selected clip's look.
-- **Edit:** click the ruler to move the playhead, `Space` play/pause, `Ctrl+B` split at the playhead, drag a clip's
-  edges to trim, drag a clip to reorder, `Ctrl+D` duplicate, `Del` delete, `Ctrl`+wheel or the slider to zoom.
-- **Export** renders every clip frame-exact with its own look (size and quality from *Film to FX*, letterboxed to
-  the first clip's shape and frame rate) and joins them into one MP4 in `renders\`. With a song picked in *Film to
-  FX*, the song plays over the whole edit and drives the audio-reactive FX at each clip's place in it.
+- **Add clip** picks from your filmed clips or uploads videos. **Record clip** records the raw webcam (no FX) to your
+  clips and puts it on the end of the timeline, so you can film, cut and style afterwards. (**Record output** under
+  *Source & capture* is different: it saves the screen with effects as a WebM download.)
+- **Drop files anywhere:** with the timeline closed a video previews in *Film to FX*; with it open you pick
+  **Preview** or **Add to timeline**. Audio files become the song. *Film to FX* also has **Add to timeline**, which
+  sends its clip with the Start/End range.
+- **Select** a clip and the Effects panel shows *Styling clip N*: deliberate changes to the preset, effect or knobs go
+  to that clip. Auto-cycle and the peace-sign gesture pause meanwhile so they never restyle a clip. `Esc` stops
+  styling. The wand button gives every clip the selected clip's look.
+- **Edit:** click the ruler to move the playhead, `Space` play/pause, `Ctrl+B` split, drag a clip's edges to trim,
+  drag a clip to reorder, `Ctrl+D` duplicate, `Del` delete, `Ctrl+Z` / `Ctrl+Shift+Z` undo/redo, `Ctrl`+wheel to zoom.
+- **Export** opens its own settings: size, quality, song and transparency (WebM / MOV, needs *Only me*). Every clip
+  is rendered frame-exact with its look, letterboxed to the first clip's shape and frame rate, and joined into one
+  file in `renders\`. A song plays over the whole edit and drives the audio-reactive FX at each clip's place in it.
+- **What's on screen** is always shown top-left: LIVE, CLIP name or TIMELINE time. Closing the timeline returns to
+  what was on before and brings back your own panel look.
 - The project autosaves to `timeline.json` in `DEPTHR_HOME`. Preview playback switches clips live, so cuts can be a
   beat late in preview; the export is exact.
 

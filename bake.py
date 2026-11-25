@@ -299,12 +299,13 @@ class Bake:
                 ss = self.start / self.fps
                 cmd += ["-ss", f"{ss:.3f}", "-t", f"{(self.end - self.start) / self.fps:.3f}", "-i", self.mux_audio,
                         "-map", "0:v", "-map", "1:a:0?", "-c:a", "aac", "-b:a", "320k", "-ar", "48000", "-ac", "2"]
-            elif self.silent and not self.alpha:   # timeline segment without sound: silent track so parts join
+            elif self.silent:   # timeline segment without sound: silent track so parts join
                 cmd += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-map", "0:v", "-map", "1:a", "-shortest",
                         "-c:a", "aac", "-b:a", "128k"]
             if self.alpha == "webm":   # transparent, small: VP9 with an alpha plane (Resolve, CapCut, browsers, OBS)
-                if self.mux_audio:
-                    cmd[cmd.index("aac")] = "libopus"; cmd[cmd.index("320k")] = "192k"
+                if "aac" in cmd:   # WebM carries Opus, not AAC
+                    cmd[cmd.index("aac")] = "libopus"
+                    if "320k" in cmd: cmd[cmd.index("320k")] = "192k"
                 cmd += ["-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p", "-crf", str(self.crf + 12), "-b:v", "0",
                         "-row-mt", "1", "-deadline", "good", "-cpu-used", "4", "-auto-alt-ref", "0", "-threads", "8",
                         "-metadata:s:v:0", "alpha_mode=1", str(self.out)]

@@ -697,13 +697,18 @@ def concat_parts(files, song="", discard=False):
     stamp = time.strftime("%Y%m%d-%H%M%S")
     lst = bake.RENDERS / f"timeline-{stamp}.txt"
     lst.write_text("".join("file '" + str(p).replace("\\", "/").replace("'", "'\\''") + "'\n" for p in parts), encoding="utf-8")
-    out = bake.RENDERS / f"timeline-{stamp}.mp4"
+    ext = parts[0].suffix.lower() if parts[0].suffix.lower() in (".mp4", ".webm", ".mov") else ".mp4"
+    out = bake.RENDERS / f"timeline-{stamp}{ext}"
     cmd = [bake.FFMPEG, "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(lst)]
     if song:
-        cmd += ["-i", song, "-map", "0:v", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "320k", "-shortest"]
-    else:
-        cmd += ["-c", "copy"]
-    cmd += ["-movflags", "+faststart", str(out)]
+        cmd += ["-i", song, "-map", "0:v", "-map", "1:a:0", "-c:v", "copy", "-c:a", "libopus" if ext == ".webm" else "aac",
+                "-b:a", "192k" if ext == ".webm" else "320k", "-shortest"]
+    else:   # video is copied; audio is re-encoded because parts mix silent tracks and real sound with different headers
+        cmd += ["-map", "0:v", "-map", "0:a?", "-c:v", "copy", "-c:a", "libopus" if ext == ".webm" else "aac",
+                "-b:a", "192k" if ext == ".webm" else "320k"]
+    if ext != ".webm":
+        cmd += ["-movflags", "+faststart"]
+    cmd += [str(out)]
     r = subprocess.run(cmd, capture_output=True, timeout=3600)
     lst.unlink(missing_ok=True)
     if r.returncode != 0:

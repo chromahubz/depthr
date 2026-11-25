@@ -352,7 +352,7 @@ function onHands(list) {
 let lastPresetSwitch = 0, blackTarget = 0;
 function onGesture(h, from, to, t) {
   if (S.gestures) {
-    if (to === "peace" && chk("gswitch") && t - lastPresetSwitch > 1300) { lastPresetSwitch = t; if (FXS.id) fxStep(1); else applyPreset(presetIdx + 1, true); }
+    if (to === "peace" && chk("gswitch") && !(typeof tlEditing === "function" && tlEditing()) && t - lastPresetSwitch > 1300) { lastPresetSwitch = t; if (FXS.id) fxStep(1); else applyPreset(presetIdx + 1, true); }
     if (to === "open" && from === "fist") { const c = palmCenter(h.p); shockwave(c[0], c[1], 1); }
   }
   if (S.painter) {
@@ -609,7 +609,7 @@ function render(t = performance.now()) {
   target(null); use(P.post); commonU();
   bindTex(0, texCam); bindTex(1, texAux); bindTex(4, srcTex); bindTex(5, F.ghost[F.gi].tex); bindTex(6, F.bA.tex);
   i1("uScene", 4); i1("uGhost", 5); i1("uBloom", 6);
-  i1("uView", view); i1("uMirror", chk("mirror") ? 1 : 0); f1("uHolo", S.holo ? 1 : 0);
+  i1("uView", view); i1("uMirror", chk("mirror") ? 1 : 0); f1("uHolo", S.holo ? 1 : 0); f1("uFxOn", fxOn ? 1 : 0);
   f1("uDof", S.dof); f1("uFocus", focus); f2("uTexel", 1 / frame.w, 1 / frame.h);
   const ac = S.auraCycle ? hsv((now * .00012) % 1, .85) : hex(S.auraCol);
   f1("uAura", S.aura); f3("uAuraCol", ac); f1("uAuraPulse", AU.bass * S.audioAmt);
@@ -635,7 +635,7 @@ function fxProg(id) {
 }
 function runFx(dt) {
   if (!FXS.id) return false;
-  if (FXS.auto > 0 && now - FXS.lastSwitch > FXS.auto * 1000) fxStep(1, true);
+  if (FXS.auto > 0 && !(typeof tlEditing === "function" && tlEditing()) && now - FXS.lastSwitch > FXS.auto * 1000) fxStep(1, true);   // paused while a timeline clip is being styled
   if (FXS.id.startsWith("preset-")) return false;   // library entry that is a base preset: no extra pass
   const p = fxProg(FXS.id); if (!p) return false;
   if (fxClear) { for (const st of F.fxSt) { target(st); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); } fxClear = false; }
@@ -797,12 +797,13 @@ function hud(lights) {
   const s = frame.stats || {};
   const g = hands.filter((h) => h.a > .5).map((h) => G_ICON[h.g] || "·").join(" ");
   $("#hud").innerHTML =
+    (typeof srcChip === "function" ? srcChip() : "") +
     `<span class="pill hot"><b>${PRESETS[presetIdx][0]}</b>${FXS.id && !FXS.id.startsWith("preset-") ? " + " + (FX.find((f) => f.id === FXS.id) || {}).name : ""}</span>` +
     `<span class="pill">model <b>${s.model_ms}ms</b>${s.gpus > 1 ? " ×" + s.gpus : ""}</span>` +
     `<span class="pill">ai <b>${s.fps}</b> fps</span><span class="pill">draw <b>${PERF.fps}</b> fps${rscale() !== 1 ? " · " + rscale() + "×" : ""}</span><span class="pill">cam <b>${s.cam}</b>${s.gain > 1.05 ? " · gain ×" + s.gain : ""}</span>` +
     `<span class="pill">hands <b>${hands.filter((h) => h.a > .5).length}</b> ${g}</span><span class="pill">lights <b>${lights.length}</b></span>` +
     (black > .5 ? `<span class="pill rec">BLACKOUT</span>` : "") + (AU.on ? `<span class="pill">${ic("wave")}<i class="dot${AU.beat > .5 ? " on" : ""}"></i></span>` : "") +
-    (recorder ? `<span class="pill rec">${ic("record")}REC</span>` : "") + (BK.on ? `<span class="pill rec">${ic("render")}RENDER ${BK.done}/${BK.total}</span>` : "");
+    (recorder ? `<span class="pill rec">${ic("record")}REC OUTPUT</span>` : "") + (BK.on ? `<span class="pill rec">${ic("render")}RENDER ${BK.done}/${BK.total}</span>` : "");
   if (now - (hud.pt || 0) > 1000) { hud.pt = now; paintRanges(); }
 }
 
@@ -838,7 +839,7 @@ for (const id of ["htrack", "gswitch", "markers"]) {
   el.addEventListener("change", () => localStorage.setItem("depthr." + id, el.checked ? "1" : "0"));
 }
 $("#rec").onclick = toggleRec; $("#snap").onclick = snap; $("#clear").onclick = clearArt;
-$("#srcgo").onclick = async () => { const s = $("#src").value.trim() || "auto"; const r = await (await fetch("/source?s=" + encodeURIComponent(s))).json(); if (!r.ok) alert(r.err); plateInit = true; };
+$("#srcgo").onclick = async () => { const s = $("#src").value.trim() || "auto"; if (typeof TL !== "undefined" && TL.open) tlToggle(false); /^(\d+|auto)$/.test(s) ? srcCamera(s) : srcClip(s); };
 addEventListener("keydown", (e) => {
   if (e.target.tagName === "INPUT" && e.target.type === "text") return;
   if (typeof tlKey === "function" && tlKey(e)) return;
@@ -880,7 +881,7 @@ async function refreshClips(select) {
   sel.innerHTML = `<option value="">Filmed clips (${r.clips.length})</option>` +
     r.clips.map((c) => `<option value="${c.path.replace(/"/g, "&quot;")}">${c.name} · ${c.mb} MB</option>`).join("");
   if (select) sel.value = select;
-  BK.free = r.free_mb;
+  BK.free = r.free_mb; MEDIA = r.clips;
 }
 async function pickClip(path) {
   BK.clip = path; if (!path) return;
@@ -889,8 +890,9 @@ async function pickClip(path) {
   BK.meta = m;
   $("#clipinfo").innerHTML = `<b style="color:var(--txt)">${m.name}</b> · ${m.w}×${m.h} · ${m.fps} fps · ${fmtT(m.dur)} (${m.frames} frames)` +
     (BK.free >= 0 ? ` · ${(BK.free / 1000).toFixed(1)} GB free for renders` : "");
-  await fetch("/source?s=" + encodeURIComponent(path)); plateInit = true; fxClear = true; ghostClear = true;
-  $("#src").value = path; if (chk("mirror")) $("#mirror").click();   // filmed footage is already the right way round
+  $("#clipsel").value = path;
+  if (typeof TL !== "undefined" && TL.open) tlToggle(false);   // previewing a clip takes the picture back from the timeline
+  await srcClip(path);
 }
 function bkStatus(t) { $("#bkstat").innerHTML = t; if (typeof TL !== "undefined" && TL.exporting) $("#tlstat").innerHTML = t; }
 async function bake(o = {}) {   // o (timeline): clip, start, end, fit, silent, song, songOff, alpha, tag, quiet, label
@@ -900,7 +902,7 @@ async function bake(o = {}) {   // o (timeline): clip, start, end, fit, silent, 
   if (!clip) { alert("Load or pick a clip first."); return; }
   if (view === 4) document.querySelector('button[data-v="0"]').click();   // split view doubles the height
   const qs = new URLSearchParams({ p: clip, start: o.start ?? (+$("#bkin").value || 0), end: o.end ?? (+$("#bkout").value || 0), maxw: $("#bksize").value,
-    crf: $("#bkq").value, song: o.song ?? BK.song, alpha: o.alpha ?? (chk("cut") ? $("#bkalpha").value : ""),
+    crf: o.crf ?? $("#bkq").value, song: o.song ?? BK.song, alpha: o.alpha ?? (chk("cut") ? $("#bkalpha").value : ""),
     tag: (o.tag ?? (FXS.id && !FXS.id.startsWith("preset-") ? FXS.id : PRESETS[presetIdx][0])).replace(/\W+/g, ""),
     fit: o.fit || "", silent: o.silent ? 1 : 0, songoff: o.songOff ?? -1, ofps: o.fps || 0 });
   bkStatus("preparing (decoding the soundtrack, loading the hand tracker)…");
@@ -947,6 +949,7 @@ async function bake(o = {}) {   // o (timeline): clip, start, end, fit, silent, 
   const res = await (await fetch("/bake/close" + (BK.cancel ? "?cancel=1" : ""))).json();
   BK.on = false; frame = null; lastT = performance.now(); FXS.lastSwitch = performance.now(); hands = []; plateInit = true; fxClear = true; AU.ext = null;
   if (wasMirror) $("#mirror").click();
+  if (typeof srcRefresh === "function") setTimeout(srcRefresh, 60);
   $("#bkbar b").style.width = "0";
   BK.free = res.free_mb;
   if (BK.cancel) bkStatus("cancelled — partial file deleted");
@@ -962,22 +965,20 @@ async function bake(o = {}) {   // o (timeline): clip, start, end, fit, silent, 
 }
 function buildBake() {
   refreshClips();
-  const onFile = async (f) => { const p = await upload(f); if (p) { await refreshClips(p); await pickClip(p); } };
-  $("#clipfile").onchange = async (e) => { const f = e.target.files[0]; if (f) await onFile(f); e.target.value = ""; };
+  $("#clipfile").onchange = (e) => { importFiles([...e.target.files], "preview"); e.target.value = ""; };
   $("#clipsel").onchange = (e) => pickClip(e.target.value);
   $("#clipprev").onclick = () => BK.clip ? pickClip(BK.clip) : alert("Load or pick a clip first.");
-  $("#clipcam").onclick = async () => { BK.clip = ""; await fetch("/source?s=auto"); plateInit = true; if (!chk("mirror")) $("#mirror").click(); $("#clipsel").value = ""; $("#src").value = "auto"; };
-  $("#bksong").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; const p = await upload(f); if (p) { BK.song = p; $("#bksongl").innerHTML = ic("music") + f.name; } e.target.value = ""; };
-  $("#bksongx").onclick = () => { BK.song = ""; $("#bksongl").innerHTML = ic("music") + "Use a song instead of the clip's sound"; };
+  $("#clipcam").onclick = () => { if (typeof TL !== "undefined" && TL.open) tlToggle(false); srcCamera(); };
+  $("#bksong").onchange = async (e) => { const f = e.target.files[0]; e.target.value = ""; if (!f) return; const p = await upload(f); if (p) setSong(p); };
+  $("#bksongx").onclick = () => setSong("");
+  $("#bk2tl").onclick = async () => {
+    if (!BK.clip) { toast("pick a clip first"); return; }
+    if (!TL.open) tlToggle(true);
+    await tlAdd(BK.clip, TL.segs.length, +$("#bkin").value || 0, +$("#bkout").value || 0); toast("added to the timeline");
+  };
   $("#bkgo").onclick = bake; $("#bkcancel").onclick = () => { BK.cancel = true; };
   $("#bkopen").onclick = () => fetch("/reveal" + (BK.last ? "?p=" + encodeURIComponent(BK.last) : ""));
-  const st = $("#stage");   // or just drop a video on the picture
-  st.addEventListener("dragover", (e) => e.preventDefault());
-  st.addEventListener("drop", async (e) => {
-    e.preventDefault();
-    const f = [...e.dataTransfer.files].find((x) => /^video\//.test(x.type) || /\.(mp4|mov|mkv|webm|avi|m4v)$/i.test(x.name));
-    if (f) await onFile(f);
-  });
+  // dropping files anywhere is handled once, in media.js
 }
 
 // test hooks
@@ -986,7 +987,7 @@ window.__depthr = { fake: [], S, PRESETS, applyPreset, shockwave, get hands() { 
   place: (x, y, hue = Math.random()) => placed.push({ x, y, hue, born: now }), audio: AU, fakeHands: (list) => onHands(list),
   get lightCount() { return frame ? buildLights().length : 0; }, FX, FXS, setFx, fxSheet, fxCompileAll, fxBroken, get body() { return body; }, BK, bake, pickClip, refreshClips };
 $("#cut").onchange = (e) => { $("#stage").classList.toggle("cut", e.target.checked); ghostClear = true; fxClear = true;
-  bkLabel(); };
+  bkLabel(); if (typeof tlExpUi === "function") tlExpUi(); };
 function bkLabel() {
   const a = chk("cut") ? $("#bkalpha").value : ""; $("#bkalpha").disabled = !chk("cut");
   $("#bkgo").innerHTML = ic("render") + "Render to " + (a === "webm" ? "WebM (transparent)" : a === "mov" ? "MOV (transparent)" : "MP4");
