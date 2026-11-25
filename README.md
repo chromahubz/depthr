@@ -46,6 +46,21 @@ file. The HUD shows `ai` fps (depth model) and `draw` fps (browser). No NVIDIA G
 
 Only one app can hold the webcam â€” close Chrome tabs using it, OBS, CapCut first.
 
+## Timeline editor (several clips, a different look on each)
+Open it with the timeline button at the top of the panel, or press `E`. It docks under the picture, CapCut-style.
+
+- **Add clip** picks a filmed clip or uploads one (or drop videos on the timeline). **Rec camera** records the raw
+  webcam (no FX) straight onto the end of the timeline, so you can film, cut and style afterwards.
+- **Select** a clip and change the preset, effect or A/B/Mix in the panel: the clip keeps that look. The wand
+  button gives every clip the selected clip's look.
+- **Edit:** click the ruler to move the playhead, `Space` play/pause, `Ctrl+B` split at the playhead, drag a clip's
+  edges to trim, drag a clip to reorder, `Ctrl+D` duplicate, `Del` delete, `Ctrl`+wheel or the slider to zoom.
+- **Export** renders every clip frame-exact with its own look (size and quality from *Film to FX*, letterboxed to
+  the first clip's shape and frame rate) and joins them into one MP4 in `renders\`. With a song picked in *Film to
+  FX*, the song plays over the whole edit and drives the audio-reactive FX at each clip's place in it.
+- The project autosaves to `timeline.json` in `DEPTHR_HOME`. Preview playback switches clips live, so cuts can be a
+  beat late in preview; the export is exact.
+
 ## Film first, FX later (render a clip to MP4)
 Panel â†’ **Film â†’ FX**: load a video (or drop it on the picture). It loops so you can audition presets/effects
 live, then **Render to MP4** processes *every* frame offline â€” nothing dropped, whatever the FX cost:

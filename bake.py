@@ -118,7 +118,11 @@ def encoder():
 
 # ------------------------------------------------------------------ bake session
 class Bake:
-    def __init__(self, pipe, models, path, start=0.0, end=0.0, maxw=1920, song="", tag="fx", crf=17, alpha=""):
+    def __init__(self, pipe, models, path, start=0.0, end=0.0, maxw=1920, song="", tag="fx", crf=17, alpha="",
+                 fit="", silent=False, song_off=-1.0, out_fps=0.0):
+        """fit='WxH' letterboxes into a fixed size (timeline: every segment the same size); silent adds a
+        silent track when there is no audio (so segments join); song_off>=0 = timeline song mode: the song
+        drives the audio-reactive FX from that offset but is not muxed here (the join adds it once)."""
         self.pipe = pipe
         self.path = str(path)
         self.meta = probe(path)
@@ -132,6 +136,12 @@ class Bake:
         w, h = self.meta["w"], self.meta["h"]
         s = min(1.0, maxw / w) if maxw > 0 else 1.0
         self.w, self.h = int(round(w * s / 2)) * 2, int(round(h * s / 2)) * 2
+        self.fit = False
+        if fit:
+            fw, fh = (int(v) for v in fit.lower().split("x"))
+            self.w, self.h, self.fit = max(2, fw // 2 * 2), max(2, fh // 2 * 2), True
+        self.silent = silent
+        self.out_fps = out_fps   # timeline: every segment gets the same rate + timebase so they join cleanly
         self.cap = cv2.VideoCapture(self.path)
         self.pos = -1
         self.first = max(0, self.start - int(round(self.fps * 0.75)))  # pre-roll so trails / plate / depth settle
@@ -141,8 +151,15 @@ class Bake:
         from concurrent.futures import ThreadPoolExecutor
         self.pool = ThreadPoolExecutor(1)
         self.hand_ms = 0.0
-        self.audio_src = song if song else (self.path if has_audio(self.path) else "")
-        self.bands = analyse_audio(self.audio_src, self.fps, self.end) if self.audio_src else None
+        self.band_base = 0
+        if song and song_off >= 0:   # timeline: bands from the song at this segment's place in the edit
+            self.audio_src, self.mux_audio = song, ""
+            self.band_base = int(round(song_off * self.fps)) - self.start
+            self.bands = analyse_audio(song, self.fps, self.band_base + self.end + 2)
+        else:
+            self.audio_src = song if song else (self.path if has_audio(self.path) else "")
+            self.mux_audio = self.audio_src
+            self.bands = analyse_audio(self.audio_src, self.fps, self.end) if self.audio_src else None
         import mediapipe as mp
         from mediapipe.tasks.python import vision, BaseOptions
         self.mp = mp
@@ -203,7 +220,15 @@ class Bake:
         if f is None:
             return None
         if f.shape[1] != self.w or f.shape[0] != self.h:
-            f = cv2.resize(f, (self.w, self.h), interpolation=cv2.INTER_AREA)
+            if self.fit:   # keep the aspect, pad with black
+                s = min(self.w / f.shape[1], self.h / f.shape[0])
+                nw, nh = max(2, int(round(f.shape[1] * s))), max(2, int(round(f.shape[0] * s)))
+                box = np.zeros((self.h, self.w, 3), np.uint8)
+                x0, y0 = (self.w - nw) // 2, (self.h - nh) // 2
+                box[y0:y0 + nh, x0:x0 + nw] = cv2.resize(f, (nw, nh), interpolation=cv2.INTER_AREA)
+                f = box
+            else:
+                f = cv2.resize(f, (self.w, self.h), interpolation=cv2.INTER_AREA)
         rgb = cv2.cvtColor(f, cv2.COLOR_BGR2RGB)
         hf = self.pool.submit(self._hands, rgb, i)
         with self.david.lock:
@@ -213,7 +238,7 @@ class Bake:
         el = max(1e-3, time.time() - self.t0)
         head = json.dumps({
             "id": i, "raw": 1, "w": self.w, "h": self.h, "aw": aw, "ah": ah, "jpg": rgb.nbytes, "hands": hands,
-            "audio": self.bands[i] if self.bands and i < len(self.bands) else None,
+            "audio": self.bands[i + self.band_base] if self.bands and 0 <= i + self.band_base < len(self.bands) else None,
             "stats": {"fps": round(self.written / el, 1), "cam": self.fps, "gain": 1, "model_ms": round(self.david.ms, 1),
                       "gpus": 1, "hand_ms": round(self.hand_ms, 1), "make_ms": round(getattr(self, "make_ms", 0), 1), "graph": self.david.graph},
         }).encode()
@@ -270,12 +295,15 @@ class Bake:
         if self.ff is None:
             cmd = [FFMPEG, "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "rgba", "-s", f"{self.w}x{self.h}",
                    "-framerate", str(self.fps), "-i", "-"]
-            if self.audio_src:
+            if self.mux_audio:
                 ss = self.start / self.fps
-                cmd += ["-ss", f"{ss:.3f}", "-t", f"{(self.end - self.start) / self.fps:.3f}", "-i", self.audio_src,
-                        "-map", "0:v", "-map", "1:a:0?", "-c:a", "aac", "-b:a", "320k"]
+                cmd += ["-ss", f"{ss:.3f}", "-t", f"{(self.end - self.start) / self.fps:.3f}", "-i", self.mux_audio,
+                        "-map", "0:v", "-map", "1:a:0?", "-c:a", "aac", "-b:a", "320k", "-ar", "48000", "-ac", "2"]
+            elif self.silent and not self.alpha:   # timeline segment without sound: silent track so parts join
+                cmd += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-map", "0:v", "-map", "1:a", "-shortest",
+                        "-c:a", "aac", "-b:a", "128k"]
             if self.alpha == "webm":   # transparent, small: VP9 with an alpha plane (Resolve, CapCut, browsers, OBS)
-                if self.audio_src:
+                if self.mux_audio:
                     cmd[cmd.index("aac")] = "libopus"; cmd[cmd.index("320k")] = "192k"
                 cmd += ["-c:v", "libvpx-vp9", "-pix_fmt", "yuva420p", "-crf", str(self.crf + 12), "-b:v", "0",
                         "-row-mt", "1", "-deadline", "good", "-cpu-used", "4", "-auto-alt-ref", "0", "-threads", "8",
@@ -284,6 +312,8 @@ class Bake:
                 cmd += ["-c:v", "prores_ks", "-profile:v", "4444", "-pix_fmt", "yuva444p10le", "-vendor", "apl0",
                         "-qscale:v", str({15: 6, 18: 9, 22: 13}.get(self.crf, 9)), str(self.out)]
             else:
+                if self.out_fps > 0:
+                    cmd += ["-r", f"{self.out_fps:.3f}", "-video_track_timescale", "90000"]
                 if encoder() == "nvenc":   # GPU encoder: leaves the CPU to the hand tracker
                     cmd += ["-c:v", "h264_nvenc", "-preset", "p6", "-tune", "hq", "-rc", "vbr", "-cq", str(self.crf),
                             "-b:v", "0", "-profile:v", "high", "-spatial-aq", "1", "-bf", "3"]

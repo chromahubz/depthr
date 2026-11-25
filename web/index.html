@@ -131,6 +131,55 @@ kbd{display:inline-block;min-width:17px;text-align:center;background:#161922;bor
 .fbtn:hover{background:#1a1e29;border-color:#ffffff2e}
 .fbtn .ic{width:15px;height:15px}
 .gpus label.c{margin:6px 0}
+.brand{align-items:center}.brand .tag{margin-left:auto;margin-right:10px}
+
+/* timeline */
+#main{display:flex;flex-direction:column;min-width:0;min-height:0}
+#stage{flex:1;min-height:0}
+#tl{flex:none;height:232px;display:flex;flex-direction:column;background:var(--panel);border-top:1px solid var(--line2);position:relative;user-select:none}
+#tl[hidden]{display:none}
+.tlbar{display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--line);position:relative}
+.tlbar .sep{width:1px;height:20px;background:var(--line2);margin:0 4px}
+.tlbar .grow{flex:1}
+.tlbar button{min-height:30px;white-space:nowrap;flex:none}
+#tl{container-type:inline-size}
+@container (max-width: 760px){ .tlbar button:not(.ib){font-size:0;gap:0;width:32px;padding:0} .tlbar button:not(.ib) .ic{width:16px;height:16px} .zoom{width:70px} #tltime{min-width:0} }
+#tltime{font-variant-numeric:tabular-nums;font-size:12px;color:var(--dim);min-width:118px;padding:0 4px}#tltime b{color:var(--txt);font-weight:600}
+.recdot{color:#fff;background:var(--acc);border-radius:99px;padding:1px 8px;margin-left:6px;font-size:10.5px;font-weight:600;animation:blink 1.2s infinite}
+@keyframes blink{50%{opacity:.55}}
+#tlrec.live{background:var(--acc);border-color:transparent;color:#fff}
+.zoom{width:120px;display:flex;align-items:center}
+#tlmenu{position:absolute;left:160px;bottom:calc(100% + 6px);width:320px;max-height:300px;overflow:auto;background:#12151c;border:1px solid var(--line2);border-radius:10px;
+ padding:5px;box-shadow:0 12px 40px #000a;z-index:5}
+#tlmenu .it{display:flex;align-items:center;gap:8px;width:100%;justify-content:flex-start;background:transparent;border:0;border-radius:7px;padding:7px 9px;font-size:12px;color:var(--txt);cursor:pointer;min-height:0}
+#tlmenu .it:hover{background:#ffffff0d}#tlmenu .it span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
+#tlmenu .it small{color:var(--faint)}#tlmenu .it.up{color:var(--acc2);border-bottom:1px solid var(--line);border-radius:7px 7px 0 0;margin-bottom:4px}
+#tlmenu .it.none{color:var(--faint);cursor:default}
+#tlscroll{position:relative;flex:1;overflow-x:auto;overflow-y:hidden;padding:0 12px;cursor:text}
+#tlruler{position:relative;height:22px;border-bottom:1px solid var(--line)}
+#tlruler span{position:absolute;top:5px;font-size:9.5px;color:var(--faint);transform:translateX(-50%);font-variant-numeric:tabular-nums}
+#tlruler span::after{content:"";position:absolute;left:50%;top:14px;width:1px;height:4px;background:var(--line2)}
+#tltrack{position:relative;height:120px;margin-top:10px}
+#tltrack .empty{position:absolute;left:0;top:20px;display:flex;align-items:center;gap:8px;color:var(--faint);font-size:12px;padding:26px 18px;border:1px dashed var(--line2);border-radius:10px}
+.seg{position:absolute;top:0;height:112px;border-radius:9px;overflow:hidden;cursor:grab;background:hsl(var(--h) 40% 16%);
+ box-shadow:0 0 0 1px hsl(var(--h) 60% 50% / .35) inset;transition:box-shadow .15s}
+.seg:hover{box-shadow:0 0 0 1px hsl(var(--h) 70% 60% / .7) inset}
+.seg.sel{box-shadow:0 0 0 2px #fff inset,0 0 0 1px #000}
+.seg.drag{z-index:3;opacity:.85;cursor:grabbing;box-shadow:0 0 0 2px #fff inset,0 10px 30px #000c}
+.seg .th{position:absolute;inset:0 0 34px 0;display:flex;overflow:hidden;pointer-events:none}
+.seg .th img{height:100%;flex:1;min-width:0;object-fit:cover;opacity:.9}
+.seg .lbl{position:absolute;left:0;right:0;bottom:0;height:34px;padding:4px 10px;display:flex;flex-direction:column;justify-content:center;pointer-events:none;
+ background:linear-gradient(90deg,hsl(var(--h) 65% 42%),hsl(var(--h) 55% 30%))}
+.seg .lk{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.seg .lk .ic{width:11px;height:11px}
+.seg .nm{font-size:10px;color:#ffffffaa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.seg .hd{position:absolute;top:0;bottom:0;width:9px;cursor:ew-resize;z-index:2;background:transparent}
+.seg .hd.l{left:0}.seg .hd.r{right:0}
+.seg.sel .hd{background:#fff}.seg.sel .hd::after{content:"";position:absolute;left:3px;top:50%;width:3px;height:16px;margin-top:-8px;border-radius:2px;background:#0008}
+#tlhead{position:absolute;left:12px;top:0;bottom:0;width:2px;margin-left:-1px;background:#fff;pointer-events:none;z-index:4;box-shadow:0 0 6px #000}
+#tlhead::before{content:"";position:absolute;left:-5px;top:0;width:12px;height:12px;background:#fff;clip-path:polygon(0 0,100% 0,100% 55%,50% 100%,0 55%)}
+.tlfoot{display:flex;justify-content:space-between;gap:12px;padding:5px 12px 8px;font-size:11px;color:var(--faint);min-height:26px}
+.tlfoot b{color:var(--dim);font-weight:600}.tlfoot a{color:var(--acc2)}
+#tlstat{white-space:nowrap}#tlstat .ic{display:inline-block;width:12px;height:12px;vertical-align:-2px}
 
 /* scrollbars */
 *{scrollbar-width:thin;scrollbar-color:#ffffff1f transparent}
@@ -141,9 +190,31 @@ kbd{display:inline-block;min-width:17px;text-align:center;background:#161922;bor
 .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--faint)}.dot.on{background:var(--acc);box-shadow:0 0 6px var(--acc)}
 </style></head><body>
 <div id="app">
+ <div id="main">
  <div id="stage"><div id="wait">waiting for frames…</div><canvas id="gl"></canvas><canvas id="ov"></canvas><div id="hud"></div><div id="toast"></div></div>
+ <div id="tl" hidden>
+  <div class="tlbar">
+   <button id="tlplay" class="ib" data-i="play" title="Play / pause (Space)"></button>
+   <div id="tltime"></div>
+   <i class="sep"></i>
+   <button id="tladd" data-i="plus" title="Add a filmed clip or upload one">Add clip</button>
+   <button id="tlrec" data-i="record" title="Record the webcam (raw, no FX) straight onto the timeline">Rec camera</button>
+   <i class="sep"></i>
+   <button id="tlsplit" class="ib" data-i="scissors" title="Split at the playhead (Ctrl+B)"></button>
+   <button id="tldup" class="ib" data-i="copy" title="Duplicate clip (Ctrl+D)"></button>
+   <button id="tldel" class="ib" data-i="trash" title="Delete clip (Del)"></button>
+   <button id="tlall" class="ib" data-i="wand" title="Give every clip the selected clip's look"></button>
+   <div class="grow"></div>
+   <label class="zoom" title="Zoom (Ctrl + mouse wheel)"><input type="range" id="tlzoom" min="8" max="240" step="1" value="60"></label>
+   <button id="tlexport" class="primary" data-i="render" title="Render every clip with its own look and join them into one MP4 (size, quality and song from Film to FX)">Export</button>
+   <div id="tlmenu" hidden></div>
+  </div>
+  <div id="tlscroll"><div id="tlruler"></div><div id="tltrack"></div><div id="tlhead"></div></div>
+  <div class="tlfoot"><span id="tlsel"></span><span id="tlstat"></span></div>
+ </div>
+ </div>
  <aside>
-  <div class="brand"><h1>DEPTH<i>R</i></h1><span class="tag">live depth FX</span></div>
+  <div class="brand"><h1>DEPTH<i>R</i></h1><span class="tag">live depth FX</span><button id="tltoggle" class="ib" data-i="timeline" title="Timeline editor (E)"></button></div>
 
   <details open><summary data-i="sparkle">Effects <span id="fxname">off</span></summary>
    <div class="row"><div class="search" data-i="search"><input type="text" id="fxq" placeholder="Search effects"></div>
@@ -235,4 +306,5 @@ kbd{display:inline-block;min-width:17px;text-align:center;background:#161922;bor
 <script src="fx_marianne.js"></script>
 <script src="fx_marianne2.js"></script>
 <script src="app.js"></script>
+<script src="timeline.js"></script>
 </body></html>

@@ -29,6 +29,7 @@ WEB = HERE / "web"
 
 # ------------------------------------------------------------------ sources
 import itertools
+import queue
 _FID = itertools.count(1)  # frame ids stay monotonic across source switches
 AUTOGAIN = True
 AUTOGAIN_MAX = 4.0
@@ -66,8 +67,9 @@ def open_camera(spec, width, height, fps):
 class Source:
     """Latest-frame grabber for a webcam index or a looping video file."""
 
-    def __init__(self, spec, width=1280, height=720, fps=30):
+    def __init__(self, spec, width=1280, height=720, fps=30, start=0.0, hold=False):
         self.spec = spec
+        self.rec = None   # Recorder while the timeline's "Rec camera" is running
         self.lock = threading.Lock()
         self.frame = None
         self.fid = 0
@@ -77,16 +79,22 @@ class Source:
         if self.is_file:
             self.cap = cv2.VideoCapture(str(spec))
             self.file_fps = self.cap.get(cv2.CAP_PROP_FPS) or 30
+            if start > 0:
+                self.cap.set(cv2.CAP_PROP_POS_MSEC, start * 1000)
         else:
             self.cap = open_camera(spec, width, height, fps)
         if not self.cap.isOpened():
             raise RuntimeError(f"cannot open source {spec}")
+        self.hold = hold and self.is_file   # timeline scrubbing: show one frame of the file and stop
         threading.Thread(target=self._loop, daemon=True).start()
 
     def _loop(self):
         t_last, n = time.time(), 0
         nxt = time.perf_counter()
         while self.alive:
+            if self.hold and self.frame is not None:
+                time.sleep(0.03)
+                continue
             ok, f = self.cap.read()
             if not ok:
                 if self.is_file:
@@ -103,6 +111,9 @@ class Source:
                     nxt = time.perf_counter()
             if not self.is_file and AUTOGAIN:
                 f = self._autogain(f)
+            r = self.rec
+            if r is not None:
+                r.push(f)
             with self.lock:
                 self.frame = f
                 self.fid = next(_FID)
@@ -141,6 +152,50 @@ class Source:
         self.alive = False
         time.sleep(0.05)
         self.cap.release()
+
+
+class Recorder:
+    """Raw webcam -> MP4 in CLIPS (the timeline's Rec camera). Frames come from the capture thread;
+    a queue keeps a slow disk from ever stalling the camera (frames are dropped instead)."""
+
+    def __init__(self, out, fps):
+        self.out, self.fps, self.n, self.ff = Path(out), fps, 0, None
+        self.q = queue.Queue(90)
+        self.t0 = time.time()
+        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.thread.start()
+
+    def push(self, f):
+        try:
+            self.q.put_nowait(f)
+        except queue.Full:
+            pass
+
+    def _run(self):
+        while True:
+            f = self.q.get()
+            if f is None:
+                return
+            if self.ff is None:
+                h, w = f.shape[:2]
+                enc = (["-c:v", "h264_nvenc", "-preset", "p5", "-rc", "vbr", "-cq", "18", "-b:v", "0"] if bake.encoder() == "nvenc"
+                       else ["-c:v", "libx264", "-preset", "veryfast", "-crf", "17"])
+                self.ff = subprocess.Popen([bake.FFMPEG, "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{w}x{h}",
+                                            "-framerate", f"{self.fps:.3f}", "-i", "-", *enc, "-pix_fmt", "yuv420p",
+                                            "-movflags", "+faststart", str(self.out)], stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            try:
+                self.ff.stdin.write(f.tobytes())
+                self.n += 1
+            except OSError:
+                return
+
+    def stop(self):
+        self.q.put(None)
+        self.thread.join(10)
+        if self.ff:
+            self.ff.stdin.close()
+            self.ff.wait(60)
+        return self.n
 
 
 # ------------------------------------------------------------------ hands
@@ -225,8 +280,23 @@ class Pipeline:
         for w in self.workers:
             threading.Thread(target=self._loop, args=(w,), daemon=True).start()
 
-    def set_source(self, spec):
-        new = Source(spec, self.args.width, self.args.height, self.args.fps)
+    def set_source(self, spec, start=0.0, hold=False):
+        if self.source.rec is not None:
+            raise RuntimeError("stop the camera recording first")
+        cam = str(spec).isdigit() or spec == "auto"
+        if cam and not self.source.is_file and spec in ("auto", self.source.spec):
+            return   # already on that webcam; reopening a device we still hold would fail
+        freed = cam and not self.source.is_file
+        if freed:
+            self.source.close()   # free the current webcam before opening another one
+        try:
+            new = Source(spec, self.args.width, self.args.height, self.args.fps, start, hold)
+        except Exception:
+            if freed:   # put the old webcam back so the app keeps running
+                new = Source(self.source.spec, self.args.width, self.args.height, self.args.fps)
+                with self.src_lock:
+                    self.source = self.hands.source = new
+            raise
         with self.src_lock:
             old, self.source = self.source, new
             self.hands.source = new
@@ -297,11 +367,11 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
-    def _send(self, code, body, ctype):
+    def _send(self, code, body, ctype, cache=False):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", "max-age=86400" if cache else "no-store")
         self.end_headers()
         self.wfile.write(body)
 
@@ -318,7 +388,7 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == "/source":
             spec = q.get("s", ["0"])[0]
             try:
-                PIPE.set_source(spec)
+                PIPE.set_source(spec, float(q.get("t", ["0"])[0] or 0), q.get("hold", ["0"])[0] == "1")
                 return self._send(200, b'{"ok":true}', "application/json")
             except Exception as e:
                 return self._send(400, json.dumps({"ok": False, "err": str(e)}).encode(), "application/json")
@@ -336,7 +406,9 @@ class Handler(BaseHTTPRequestHandler):
                     BAKE.close(cancel=True)
                 PIPE.paused = PIPE.hands.paused = True
                 BAKE = bake.Bake(PIPE, MODELS, g("p"), float(g("start", "0")), float(g("end", "0")),
-                                 int(g("maxw", "1920")), g("song"), g("tag", "fx"), int(g("crf", "17")), g("alpha"))
+                                 int(g("maxw", "1920")), g("song"), g("tag", "fx"), int(g("crf", "17")), g("alpha"),
+                                 fit=g("fit"), silent=g("silent") == "1", song_off=float(g("songoff", "-1") or -1),
+                                 out_fps=float(g("ofps", "0") or 0))
                 return self._json({"ok": True, **BAKE.info()})
             except Exception as e:
                 BAKE = None
@@ -369,6 +441,45 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._json({"ok": False, "err": f"{FAVS_FILE} is not valid JSON: {e}", "favs": []}, 500)
             return self._json({"ok": True, "path": str(FAVS_FILE), **data})
+        if u.path == "/thumb":   # small JPEG of a clip at t seconds, for the timeline
+            cap = cv2.VideoCapture(q.get("p", [""])[0])
+            cap.set(cv2.CAP_PROP_POS_MSEC, float(q.get("t", ["0"])[0] or 0) * 1000)
+            ok, f = cap.read()
+            cap.release()
+            if not ok:
+                return self._send(404, b"no frame", "text/plain")
+            h = max(24, min(240, int(q.get("h", ["64"])[0])))
+            f = cv2.resize(f, (max(1, int(f.shape[1] * h / f.shape[0])), h), interpolation=cv2.INTER_AREA)
+            return self._send(200, cv2.imencode(".jpg", f, [cv2.IMWRITE_JPEG_QUALITY, 72])[1].tobytes(), "image/jpeg", cache=True)
+        if u.path == "/record/start":
+            with PIPE.src_lock:
+                src = PIPE.source
+            if src.is_file:
+                return self._json({"ok": False, "err": "switch to the webcam first"}, 409)
+            if src.rec is not None:
+                return self._json({"ok": False, "err": "already recording"}, 409)
+            bake.CLIPS.mkdir(parents=True, exist_ok=True)
+            if shutil.disk_usage(bake.CLIPS).free < 800e6:
+                return self._json({"ok": False, "err": f"less than 800 MB free on {bake.CLIPS.drive}"}, 507)
+            out = bake.CLIPS / f"rec-{time.strftime('%Y%m%d-%H%M%S')}.mp4"
+            src.rec = Recorder(out, src.fps if src.fps > 5 else PIPE.args.fps)
+            return self._json({"ok": True, "path": str(out)})
+        if u.path == "/record/stop":
+            with PIPE.src_lock:
+                src = PIPE.source
+            r = src.rec
+            if r is None:
+                return self._json({"ok": False, "err": "not recording"}, 409)
+            src.rec = None
+            n = r.stop()
+            return self._json({"ok": n > 0, "path": str(r.out), "frames": n, "dur": round(n / r.fps, 2),
+                               "err": "" if n else "no frames were recorded"})
+        if u.path == "/project":
+            try:
+                data = json.loads(PROJECT_FILE.read_text(encoding="utf-8")) if PROJECT_FILE.is_file() else {"version": 1, "segs": []}
+            except Exception as e:
+                return self._json({"ok": False, "err": str(e), "segs": []}, 500)
+            return self._json({"ok": True, "path": str(PROJECT_FILE), **data})
         if u.path == "/settings":
             return self._json({"ok": True, "mode": EFFECTIVE["mode"], "effective": EFFECTIVE, "saved": load_settings(),
                                "gpus": GPUS, "profiles": PROFILES, "path": str(SETTINGS_FILE)})
@@ -414,6 +525,24 @@ class Handler(BaseHTTPRequestHandler):
                 tmp.write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
                 os.replace(tmp, FAVS_FILE)
                 return self._json({"ok": True, "path": str(FAVS_FILE), "n": len(data["favs"])})
+            except Exception as e:
+                return self._json({"ok": False, "err": str(e)}, 400)
+        if u.path == "/project":   # timeline project, written atomically
+            try:
+                data = json.loads(self.rfile.read(n))
+                if not isinstance(data.get("segs"), list):
+                    raise ValueError("missing segs list")
+                PROJECT_FILE.parent.mkdir(parents=True, exist_ok=True)
+                tmp = PROJECT_FILE.with_suffix(".tmp")
+                tmp.write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
+                os.replace(tmp, PROJECT_FILE)
+                return self._json({"ok": True})
+            except Exception as e:
+                return self._json({"ok": False, "err": str(e)}, 400)
+        if u.path == "/concat":   # join the timeline's rendered segments (same size/codec) into one file
+            try:
+                data = json.loads(self.rfile.read(n))
+                return self._json(concat_parts(data.get("files") or [], data.get("song") or "", bool(data.get("discard"))))
             except Exception as e:
                 return self._json({"ok": False, "err": str(e)}, 400)
         if u.path == "/settings":   # performance profile; server-side parts apply on the next start
@@ -547,6 +676,41 @@ def resolve_preview(st, cli=None):
             r["cli"].append("mode")
     return r
 FAVS_FILE = Path(os.environ.get("DEPTHR_FAVS", bake.HOME / "favorites.json"))
+PROJECT_FILE = Path(os.environ.get("DEPTHR_PROJECT", bake.HOME / "timeline.json"))
+
+
+def concat_parts(files, song="", discard=False):
+    """Stream-copy the segment renders into one MP4 (optionally with one song over all of it).
+    Parts must live in RENDERS; they are deleted afterwards (or right away with discard)."""
+    root = bake.RENDERS.resolve()
+    parts = [Path(f).resolve() for f in files]
+    for p in parts:
+        if root not in p.parents or not p.is_file():
+            raise ValueError(f"not a render: {p}")
+    if discard:
+        for p in parts:
+            p.unlink(missing_ok=True)
+        return {"ok": True, "discarded": len(parts)}
+    if not parts:
+        raise ValueError("nothing to join")
+    t0 = time.time()
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    lst = bake.RENDERS / f"timeline-{stamp}.txt"
+    lst.write_text("".join("file '" + str(p).replace("\\", "/").replace("'", "'\\''") + "'\n" for p in parts), encoding="utf-8")
+    out = bake.RENDERS / f"timeline-{stamp}.mp4"
+    cmd = [bake.FFMPEG, "-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", str(lst)]
+    if song:
+        cmd += ["-i", song, "-map", "0:v", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "320k", "-shortest"]
+    else:
+        cmd += ["-c", "copy"]
+    cmd += ["-movflags", "+faststart", str(out)]
+    r = subprocess.run(cmd, capture_output=True, timeout=3600)
+    lst.unlink(missing_ok=True)
+    if r.returncode != 0:
+        return {"ok": False, "err": r.stderr.decode(errors="replace")[-600:], "parts": [str(p) for p in parts]}
+    for p in parts:
+        p.unlink(missing_ok=True)
+    return {"ok": True, "out": str(out), "secs": round(time.time() - t0, 1), "free_mb": free_mb()}
 BAKE = None
 
 

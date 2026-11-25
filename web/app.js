@@ -158,6 +158,7 @@ function applyPreset(i, announce) {
   document.querySelectorAll("#presets button").forEach((b, j) => b.classList.toggle("on", j === presetIdx));
   ghostClear = true;
   if (announce) toast(PRESETS[presetIdx][0]);
+  if (typeof tlTouch === "function") tlTouch();
 }
 let toastT = 0;
 function toast(txt) { const t = $("#toast"); t.textContent = txt; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 1400); }
@@ -699,6 +700,7 @@ function setFx(id, announce) {
   const on = document.querySelector(`#fxgrid button[data-id="${id}"]`); if (on) on.scrollIntoView({ block: "nearest" });
   $("#fxname").textContent = def ? `${def.cat} · ${def.name}` : "off";
   if (announce && def) toast(def.name);
+  if (typeof tlTouch === "function") tlTouch();
 }
 function fxStep(dir, random) {
   const list = fxList(); if (!list.length) return;
@@ -720,8 +722,8 @@ function buildFxPanel() {
   cats.firstChild.classList.add("on");
   $("#fxq").oninput = (e) => { FXS.q = e.target.value; fillFxGrid(); };
   for (const k of ["A", "B", "Mix"]) { const el = $("#fx" + k), out = el.nextElementSibling;
-    el.oninput = () => { FXS[k === "Mix" ? "mix" : k.toLowerCase()] = +el.value; out.textContent = (+el.value).toFixed(2); }; el.oninput(); }
-  $("#fxscene").onchange = (e) => { FXS.scene = e.target.checked; };
+    el.oninput = () => { FXS[k === "Mix" ? "mix" : k.toLowerCase()] = +el.value; out.textContent = (+el.value).toFixed(2); if (typeof tlTouch === "function") tlTouch(); }; el.oninput(); }
+  $("#fxscene").onchange = (e) => { FXS.scene = e.target.checked; if (typeof tlTouch === "function") tlTouch(); };
   $("#fxauto").onchange = (e) => { FXS.auto = +e.target.value; FXS.lastSwitch = now; };
   $("#fxoff").onclick = () => setFx("", false);
   $("#fxshuffle").onclick = () => fxStep(1, true);
@@ -839,6 +841,7 @@ $("#rec").onclick = toggleRec; $("#snap").onclick = snap; $("#clear").onclick = 
 $("#srcgo").onclick = async () => { const s = $("#src").value.trim() || "auto"; const r = await (await fetch("/source?s=" + encodeURIComponent(s))).json(); if (!r.ok) alert(r.err); plateInit = true; };
 addEventListener("keydown", (e) => {
   if (e.target.tagName === "INPUT" && e.target.type === "text") return;
+  if (typeof tlKey === "function" && tlKey(e)) return;
   const k = e.key.toLowerCase(), vmap = { 1: 0, 2: 4, 3: 1, 4: 2, 5: 3, 6: 5 };
   if (k in vmap) document.querySelector(`button[data-v="${vmap[k]}"]`).click();
   else if (k === "]") fxStep(1);
@@ -889,13 +892,17 @@ async function pickClip(path) {
   await fetch("/source?s=" + encodeURIComponent(path)); plateInit = true; fxClear = true; ghostClear = true;
   $("#src").value = path; if (chk("mirror")) $("#mirror").click();   // filmed footage is already the right way round
 }
-function bkStatus(t) { $("#bkstat").innerHTML = t; }
-async function bake() {
+function bkStatus(t) { $("#bkstat").innerHTML = t; if (typeof TL !== "undefined" && TL.exporting) $("#tlstat").innerHTML = t; }
+async function bake(o = {}) {   // o (timeline): clip, start, end, fit, silent, song, songOff, alpha, tag, quiet, label
   if (BK.on) return;
-  if (!BK.clip) { alert("Load or pick a clip first."); return; }
+  if (o instanceof Event) o = {};
+  const clip = o.clip ?? BK.clip;
+  if (!clip) { alert("Load or pick a clip first."); return; }
   if (view === 4) document.querySelector('button[data-v="0"]').click();   // split view doubles the height
-  const qs = new URLSearchParams({ p: BK.clip, start: +$("#bkin").value || 0, end: +$("#bkout").value || 0, maxw: $("#bksize").value,
-    crf: $("#bkq").value, song: BK.song, alpha: chk("cut") ? $("#bkalpha").value : "", tag: (FXS.id && !FXS.id.startsWith("preset-") ? FXS.id : PRESETS[presetIdx][0]).replace(/\W+/g, "") });
+  const qs = new URLSearchParams({ p: clip, start: o.start ?? (+$("#bkin").value || 0), end: o.end ?? (+$("#bkout").value || 0), maxw: $("#bksize").value,
+    crf: $("#bkq").value, song: o.song ?? BK.song, alpha: o.alpha ?? (chk("cut") ? $("#bkalpha").value : ""),
+    tag: (o.tag ?? (FXS.id && !FXS.id.startsWith("preset-") ? FXS.id : PRESETS[presetIdx][0])).replace(/\W+/g, ""),
+    fit: o.fit || "", silent: o.silent ? 1 : 0, songoff: o.songOff ?? -1, ofps: o.fps || 0 });
   bkStatus("preparing (decoding the soundtrack, loading the hand tracker)…");
   const meta = await (await fetch("/bake/open?" + qs)).json();
   if (!meta.ok) { bkStatus(ic("alert") + " " + meta.err); return; }
@@ -931,7 +938,7 @@ async function bake() {
       if (BK.done % 5 === 0 || BK.done === BK.total) {
         const el = (performance.now() - t0) / 1000, rate = BK.done / el;
         $("#bkbar b").style.width = (BK.done / BK.total * 100).toFixed(1) + "%";
-        bkStatus(`rendering ${BK.done}/${BK.total} · ${rate.toFixed(1)} fps · ${fmtT((BK.total - BK.done) / Math.max(rate, .01))} left`);
+        bkStatus(`${o.label || ""}rendering ${BK.done}/${BK.total} · ${rate.toFixed(1)} fps · ${fmtT((BK.total - BK.done) / Math.max(rate, .01))} left`);
         hudT = 0; hud(buildLights());
       }
     }
@@ -949,7 +956,7 @@ async function bake() {
     bkStatus(`${ic("check")} <b style="color:var(--txt)">${res.out.split(/[\\/]/).pop()}</b> · ${res.frames} frames in ${res.secs}s · ` +
       `<a href="#" id="bkreveal" style="color:var(--acc)">show file</a> · ${(res.free_mb / 1000).toFixed(1)} GB left`);
     $("#bkreveal").onclick = (e) => { e.preventDefault(); fetch("/reveal?p=" + encodeURIComponent(res.out)); };
-    toast("render done");
+    if (!o.quiet) toast("render done");
   }
   return { ...res, err };
 }
