@@ -46,7 +46,7 @@ const SCHEMA = [
   ["Post", [
     ["bloom", RANGE, "Bloom", 0, 2, .01], ["chroma", RANGE, "Chroma split", 0, 1, .01], ["vig", RANGE, "Vignette", 0, 1, .01], ["grain", RANGE, "Grain", 0, 1, .01]]],
   ["Gestures & audio", [
-    ["gestures", CHECK, "Gestures (✌ next · ✊ blackout · ✊→🖐 burst)"], ["beatWaves", CHECK, "Shockwave on every kick"], ["audioAmt", RANGE, "Audio reactivity", 0, 3, .01]]],
+    ["gestures", CHECK, "Gestures (peace next · fist blackout · fist→open burst)"], ["beatWaves", CHECK, "Shockwave on every kick"], ["audioAmt", RANGE, "Audio reactivity", 0, 3, .01]]],
 ];
 const D = {
   mat: "photo", tint: "#ffffff", amb: .1, alb: .6, spec: .7, gloss: 24, wrap: .15, rim: 0, bands: 3, ink: 1,
@@ -99,11 +99,12 @@ const S = { ...D };
 let presetIdx = 0;
 
 const ctrls = {};
+const SEC_ICON = { "Material": "layers", "Finger spotlights": "hand", "Magic lights": "sparkle", "Sun & shadows": "compass", "Depth FX": "layers", "Matte FX": "eye", "Post": "sliders", "Gestures & audio": "hand" };
 function buildPanel() {
   const host = $("#sections");
   for (const [title, items] of SCHEMA) {
     const det = document.createElement("details");
-    det.innerHTML = `<summary>${title}</summary>`;
+    det.innerHTML = `<summary>${ic(SEC_ICON[title] || "sliders")}${title}</summary>`;
     for (const [key, type, label, a, b, step] of items) {
       let el, wrap;
       if (type === RANGE) {
@@ -140,7 +141,11 @@ function buildPanel() {
     pg.appendChild(b);
   });
 }
-function syncPanel() { for (const k in ctrls) ctrls[k](S[k]); }
+function syncPanel() { for (const k in ctrls) ctrls[k](S[k]); paintRanges(); }
+// sliders draw their filled part from --p; programmatic value changes call paintRanges()
+function paintRange(el) { const lo = +el.min || 0, hi = el.max === "" ? 100 : +el.max; el.style.setProperty("--p", ((+el.value - lo) / ((hi - lo) || 1) * 100) + "%"); }
+function paintRanges() { document.querySelectorAll('input[type=range]').forEach(paintRange); }
+document.addEventListener("input", (e) => { if (e.target.type === "range") paintRange(e.target); });
 // gestures are a user lock like hand tracking: off by default, kept across presets and reloads
 let userGestures = localStorage.getItem("depthr.gestures") === "1";
 function onParam(k) { if (k === "holo" || k === "world") ghostClear = true;
@@ -491,7 +496,7 @@ $("#afile").onchange = async (e) => {
   stopAudio(); const ctx = audioCtx(); await ctx.resume();
   AU.el = new Audio(URL.createObjectURL(f)); AU.el.loop = true;
   AU.srcNode = ctx.createMediaElementSource(AU.el); AU.srcNode.connect(AU.an); AU.srcNode.connect(ctx.destination); AU.srcNode.connect(AU.dest);
-  await AU.el.play(); AU.on = true; toast("♫ " + f.name.replace(/\.[^.]+$/, "").slice(0, 28));
+  await AU.el.play(); AU.on = true; toast(f.name.replace(/\.[^.]+$/, "").slice(0, 28));
 };
 $("#astop").onclick = stopAudio;
 function band(lo, hi, peak) { const hz = AU.ctx.sampleRate / AU.an.fftSize; let s = 0, n = 0, m = 0; for (let i = Math.max(1, Math.floor(lo / hz)); i <= Math.ceil(hi / hz); i++) { s += AU.data[i]; n++; m = Math.max(m, AU.data[i]); } return peak ? m / 255 : s / (n * 255); }
@@ -647,7 +652,7 @@ function runFx(dt) {
   quad(); F.si = nx;
   return true;
 }
-// favorites: ⭐ an effect together with its knobs (A/B/Mix/scene). Saved to favorites.json in DEPTHR_HOME through
+// favorites: star an effect together with its knobs (A/B/Mix/scene). Saved to favorites.json in DEPTHR_HOME through
 // the server, with a localStorage copy so nothing is lost if the server is down. Picking a favorite restores its knobs.
 let FAVS = [], favSaveT = 0;
 const favOf = (id) => FAVS.find((f) => f.id === id);
@@ -655,7 +660,7 @@ async function loadFavs() {
   try { const r = await (await fetch("/favs", { cache: "no-store" })).json(); if (!Array.isArray(r.favs)) throw 0; FAVS = r.favs;
     if (!r.ok) toast("favorites file unreadable, see console"), console.warn(r.err); }
   catch { try { FAVS = JSON.parse(localStorage.getItem("depthr.favs") || "[]"); } catch { FAVS = []; } }
-  favUi(); if (FXS.cat === "★") fillFxGrid();
+  favUi(); if (FXS.cat === "fav") fillFxGrid();
 }
 function saveFavs() {
   localStorage.setItem("depthr.favs", JSON.stringify(FAVS)); clearTimeout(favSaveT);
@@ -667,19 +672,19 @@ function toggleFav(update) {
   if (!FXS.id) { toast("pick an effect first"); return; }
   const def = FX.find((f) => f.id === FXS.id); if (!def) return;
   const cur = favOf(FXS.id), entry = { id: FXS.id, name: def.name, cat: def.cat, a: FXS.a, b: FXS.b, mix: FXS.mix, scene: FXS.scene, at: new Date().toISOString().slice(0, 19) };
-  if (cur && update) { Object.assign(cur, entry); toast("⭐ knobs saved · " + def.name); }
+  if (cur && update) { Object.assign(cur, entry); toast("Knobs saved · " + def.name); }
   else if (cur) { FAVS = FAVS.filter((f) => f !== cur); toast("removed from favorites"); }
-  else { FAVS.push(entry); toast("⭐ " + def.name); }
+  else { FAVS.push(entry); toast("Favorited · " + def.name); }
   saveFavs(); favUi(); fillFxGrid();
 }
 function favUi() {
-  const on = !!favOf(FXS.id), b = $("#fxfav"); b.textContent = on ? "★" : "☆"; b.classList.toggle("on", on);
-  const chip = document.querySelector('#fxcats button[data-cat="★"]'); if (chip) chip.textContent = `★ Favorites ${FAVS.filter((f) => FX.some((x) => x.id === f.id)).length}`;
+  const on = !!favOf(FXS.id), b = $("#fxfav"); b.innerHTML = ic(on ? "starFill" : "star"); b.classList.toggle("on", on);
+  const chip = document.querySelector('#fxcats button[data-cat="fav"]'); if (chip) chip.innerHTML = `${ic("star")}Favorites <small>${FAVS.filter((f) => FX.some((x) => x.id === f.id)).length}</small>`;
 }
-function setKnob(k, v) { const el = $("#fx" + k); el.value = v; el.oninput(); }
+function setKnob(k, v) { const el = $("#fx" + k); el.value = v; el.oninput(); paintRange(el); }
 function fxList() {
   const q = FXS.q.toLowerCase();
-  if (FXS.cat === "★") return FAVS.map((v) => FX.find((f) => f.id === v.id)).filter((f) => f && (!q || f.name.toLowerCase().includes(q) || f.cat.toLowerCase().includes(q)));
+  if (FXS.cat === "fav") return FAVS.map((v) => FX.find((f) => f.id === v.id)).filter((f) => f && (!q || f.name.toLowerCase().includes(q) || f.cat.toLowerCase().includes(q)));
   return FX.filter((f) => (FXS.cat === "All" || f.cat === FXS.cat) && (!q || f.name.toLowerCase().includes(q) || f.cat.toLowerCase().includes(q)));
 }
 function setFx(id, announce) {
@@ -710,7 +715,7 @@ function addPresetsToLibrary() {
 function buildFxPanel() {
   addPresetsToLibrary();
   const cats = $("#fxcats");
-  ["All", "★", ...FX_CATS].forEach((c) => { const b = document.createElement("button"); b.textContent = c === "All" ? `All ${FX.length}` : c === "★" ? "★ Favorites 0" : `${c} ${FX.filter((f) => f.cat === c).length}`; b.dataset.cat = c;
+  ["All", "fav", ...FX_CATS].forEach((c) => { const b = document.createElement("button"); b.innerHTML = c === "All" ? `All <small>${FX.length}</small>` : c === "fav" ? `${ic("star")}Favorites <small>0</small>` : `${c} <small>${FX.filter((f) => f.cat === c).length}</small>`; b.dataset.cat = c;
     b.onclick = () => { FXS.cat = c; cats.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); fillFxGrid(); }; cats.appendChild(b); });
   cats.firstChild.classList.add("on");
   $("#fxq").oninput = (e) => { FXS.q = e.target.value; fillFxGrid(); };
@@ -725,7 +730,7 @@ function buildFxPanel() {
 }
 function fillFxGrid() {
   const g = $("#fxgrid"); g.innerHTML = "";
-  for (const f of fxList()) { const b = document.createElement("button"); b.dataset.id = f.id; b.textContent = (favOf(f.id) ? "★ " : "") + f.name; b.title = f.desc ? `${f.cat} · ${f.desc}` : f.cat; if (f.preset != null) b.classList.add("pre");
+  for (const f of fxList()) { const b = document.createElement("button"); b.dataset.id = f.id; if (favOf(f.id)) b.innerHTML = ic("starFill", "fav"); const nm = document.createElement("span"); nm.textContent = f.name; b.appendChild(nm); b.title = f.desc ? `${f.cat} · ${f.desc}` : f.cat; if (f.preset != null) b.classList.add("pre");
     if (f.id === FXS.id) b.classList.add("on"); b.onclick = () => setFx(FXS.id === f.id ? "" : f.id); g.appendChild(b); }
   $("#fxcount").textContent = `${fxList().length} shown`;
 }
@@ -749,7 +754,7 @@ function fxCompileAll() { const bad = {}; for (const f of FX) { if (f.preset != 
 // =============================================================== overlay: markers, bolts, labels
 function scr(x, y) { const H = view === 4 ? ov.height / 2 : ov.height; return [(chk("mirror") ? 1 - x : x) * ov.width, y * H]; }
 let cleanShot = false;   // set while a snapshot redraws the overlay without markers
-const G_ICON = { fist: "✊", open: "🖐", peace: "✌", point: "☝", pinch: "🤏" };
+const G_ICON = { fist: "fist", open: "open", peace: "peace", point: "point", pinch: "pinch" };   // gesture labels (text, no emoji)
 function drawOverlay() {
   octx.clearRect(0, 0, ov.width, ov.height);
   if (view === 1 || view === 2 || view === 3) return;
@@ -768,7 +773,7 @@ function drawOverlay() {
   octx.restore();
   if (!chk("markers") || S.holo || BK.on || recorder || cleanShot) return;   // preview aid only: never in recordings or snapshots
   octx.lineWidth = 2 * s; octx.strokeStyle = "rgba(255,255,255,.85)"; octx.fillStyle = "rgba(255,255,255,.9)";
-  octx.font = `${Math.round(20 * s)}px system-ui`;
+  octx.font = `600 ${Math.round(13 * s)}px system-ui`;
   for (const h of hands) {
     if (h.a < .3) continue;
     octx.globalAlpha = h.a;
@@ -778,7 +783,7 @@ function drawOverlay() {
       octx.beginPath(); octx.arc(X, Y, r, 0, 7); octx.stroke();
       octx.beginPath(); octx.moveTo(X - dx / dl * r, Y - dy / dl * r); octx.lineTo(X - dx / dl * r * 3.2, Y - dy / dl * r * 3.2); octx.stroke();
     });
-    if (S.gestures || S.painter || S.spells) { const [WX, WY] = scr(h.p[0][0], h.p[0][1]); if (G_ICON[h.g]) octx.fillText(G_ICON[h.g], WX - 10 * s, WY + 28 * s); }
+    if (S.gestures || S.painter || S.spells) { const [WX, WY] = scr(h.p[0][0], h.p[0][1]); if (G_ICON[h.g]) octx.fillText(G_ICON[h.g].toUpperCase(), WX - 16 * s, WY + 26 * s); }
   }
   octx.globalAlpha = 1;
   if (S.painter) for (const pl of placed) { const [X, Y] = scr(pl.x, pl.y); octx.strokeStyle = "rgba(255,255,255,.3)"; octx.beginPath(); octx.arc(X, Y, 14 * s, 0, 7); octx.stroke(); }
@@ -794,8 +799,9 @@ function hud(lights) {
     `<span class="pill">model <b>${s.model_ms}ms</b>${s.gpus > 1 ? " ×" + s.gpus : ""}</span>` +
     `<span class="pill">ai <b>${s.fps}</b> fps</span><span class="pill">draw <b>${PERF.fps}</b> fps${rscale() !== 1 ? " · " + rscale() + "×" : ""}</span><span class="pill">cam <b>${s.cam}</b>${s.gain > 1.05 ? " · gain ×" + s.gain : ""}</span>` +
     `<span class="pill">hands <b>${hands.filter((h) => h.a > .5).length}</b> ${g}</span><span class="pill">lights <b>${lights.length}</b></span>` +
-    (black > .5 ? `<span class="pill rec">BLACKOUT</span>` : "") + (AU.on ? `<span class="pill">♫ <b>${AU.beat > .5 ? "●" : "○"}</b></span>` : "") +
-    (recorder ? `<span class="pill rec">● REC</span>` : "") + (BK.on ? `<span class="pill rec">● RENDER ${BK.done}/${BK.total}</span>` : "");
+    (black > .5 ? `<span class="pill rec">BLACKOUT</span>` : "") + (AU.on ? `<span class="pill">${ic("wave")}<i class="dot${AU.beat > .5 ? " on" : ""}"></i></span>` : "") +
+    (recorder ? `<span class="pill rec">${ic("record")}REC</span>` : "") + (BK.on ? `<span class="pill rec">${ic("render")}RENDER ${BK.done}/${BK.total}</span>` : "");
+  if (now - (hud.pt || 0) > 1000) { hud.pt = now; paintRanges(); }
 }
 
 // =============================================================== input, capture, keys
@@ -844,7 +850,7 @@ addEventListener("keydown", (e) => {
   else if (k === "m") $("#mirror").click();
   else if (k === "k") $("#cut").click();
   else if (k === "t") { $("#htrack").click(); toast(chk("htrack") ? "hand tracking on" : "hand tracking off"); }
-  else if (k === "g") { $("#gswitch").click(); toast(chk("gswitch") ? "✌ switches looks" : "✌ switching locked"); }
+  else if (k === "g") { $("#gswitch").click(); toast(chk("gswitch") ? "Peace sign switches looks" : "Peace-sign switching locked"); }
   else if (k === "r") toggleRec();
   else if (k === "s") snap();
   else if (k === "l" || k === "*") toggleFav(e.shiftKey);
@@ -868,7 +874,7 @@ async function upload(file) {
 }
 async function refreshClips(select) {
   const r = await (await fetch("/clips")).json(), sel = $("#clipsel");
-  sel.innerHTML = `<option value="">— filmed clips (${r.clips.length}) —</option>` +
+  sel.innerHTML = `<option value="">Filmed clips (${r.clips.length})</option>` +
     r.clips.map((c) => `<option value="${c.path.replace(/"/g, "&quot;")}">${c.name} · ${c.mb} MB</option>`).join("");
   if (select) sel.value = select;
   BK.free = r.free_mb;
@@ -892,7 +898,7 @@ async function bake() {
     crf: $("#bkq").value, song: BK.song, alpha: chk("cut") ? $("#bkalpha").value : "", tag: (FXS.id && !FXS.id.startsWith("preset-") ? FXS.id : PRESETS[presetIdx][0]).replace(/\W+/g, "") });
   bkStatus("preparing (decoding the soundtrack, loading the hand tracker)…");
   const meta = await (await fetch("/bake/open?" + qs)).json();
-  if (!meta.ok) { bkStatus("✕ " + meta.err); return; }
+  if (!meta.ok) { bkStatus(ic("alert") + " " + meta.err); return; }
   // fresh deterministic state, mirror off, live loop paused
   BK.on = true; BK.cancel = false; BK.total = meta.end - meta.start; BK.done = 0;
   const wasMirror = chk("mirror"); if (wasMirror) $("#mirror").click();
@@ -937,10 +943,10 @@ async function bake() {
   $("#bkbar b").style.width = "0";
   BK.free = res.free_mb;
   if (BK.cancel) bkStatus("cancelled — partial file deleted");
-  else if (err || !res.ok) bkStatus("✕ " + (err || res.err));
+  else if (err || !res.ok) bkStatus(ic("alert") + " " + (err || res.err));
   else {
     BK.last = res.out;
-    bkStatus(`✓ <b style="color:var(--txt)">${res.out.split(/[\\/]/).pop()}</b> · ${res.frames} frames in ${res.secs}s · ` +
+    bkStatus(`${ic("check")} <b style="color:var(--txt)">${res.out.split(/[\\/]/).pop()}</b> · ${res.frames} frames in ${res.secs}s · ` +
       `<a href="#" id="bkreveal" style="color:var(--acc)">show file</a> · ${(res.free_mb / 1000).toFixed(1)} GB left`);
     $("#bkreveal").onclick = (e) => { e.preventDefault(); fetch("/reveal?p=" + encodeURIComponent(res.out)); };
     toast("render done");
@@ -954,8 +960,8 @@ function buildBake() {
   $("#clipsel").onchange = (e) => pickClip(e.target.value);
   $("#clipprev").onclick = () => BK.clip ? pickClip(BK.clip) : alert("Load or pick a clip first.");
   $("#clipcam").onclick = async () => { BK.clip = ""; await fetch("/source?s=auto"); plateInit = true; if (!chk("mirror")) $("#mirror").click(); $("#clipsel").value = ""; $("#src").value = "auto"; };
-  $("#bksong").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; const p = await upload(f); if (p) { BK.song = p; $("#bksongl").textContent = "♫ " + f.name; } e.target.value = ""; };
-  $("#bksongx").onclick = () => { BK.song = ""; $("#bksongl").textContent = "♫ Use a song instead of the clip's sound…"; };
+  $("#bksong").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; const p = await upload(f); if (p) { BK.song = p; $("#bksongl").innerHTML = ic("music") + f.name; } e.target.value = ""; };
+  $("#bksongx").onclick = () => { BK.song = ""; $("#bksongl").innerHTML = ic("music") + "Use a song instead of the clip's sound"; };
   $("#bkgo").onclick = bake; $("#bkcancel").onclick = () => { BK.cancel = true; };
   $("#bkopen").onclick = () => fetch("/reveal" + (BK.last ? "?p=" + encodeURIComponent(BK.last) : ""));
   const st = $("#stage");   // or just drop a video on the picture
@@ -976,7 +982,7 @@ $("#cut").onchange = (e) => { $("#stage").classList.toggle("cut", e.target.check
   bkLabel(); };
 function bkLabel() {
   const a = chk("cut") ? $("#bkalpha").value : ""; $("#bkalpha").disabled = !chk("cut");
-  $("#bkgo").textContent = "● Render to " + (a === "webm" ? "WebM (transparent)" : a === "mov" ? "MOV (transparent)" : "MP4");
+  $("#bkgo").innerHTML = ic("render") + "Render to " + (a === "webm" ? "WebM (transparent)" : a === "mov" ? "MOV (transparent)" : "MP4");
 }
 $("#bkalpha").onchange = bkLabel;
 // =============================================================== Performance panel
@@ -992,14 +998,15 @@ async function loadPerf() {
   $("#pfcam").value = `${adv.width || 1920}x${adv.height || 1080}`;
   $("#pfjpeg").value = adv.jpeg || 95; $("#pfjpeg").oninput();
   $("#pfscale").value = PERF.rscale; $("#pfscale").oninput();
-  perfUi(); layout();
+  perfUi(); layout(); paintRanges();
 }
 function perfUi() {
   const r = PERF.info; if (!r) return; const e = r.effective, adv = $("#pfmode").value === "advanced";
+  $("#pfseg").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.m === $("#pfmode").value));
   $("#pfadv").style.display = adv ? "" : "none";
   const gp = e.devices.split(",").map((d) => (r.gpus.find((g) => g.id === d) || { name: d }).name).join(" + ");
   $("#pfnow").innerHTML = `Running <b>${e.mode}</b> · model on ${gp} · camera ${e.width}×${e.height} · JPEG ${e.jpeg}` +
-    (e.cli && e.cli.length ? `<br>⚠ set on the command line (wins over this panel): ${e.cli.join(", ")}` : "") +
+    (e.cli && e.cli.length ? `<br>${ic("alert")} set on the command line (wins over this panel): ${e.cli.join(", ")}` : "") +
     `<br>${r.gpus.length} NVIDIA GPU${r.gpus.length === 1 ? "" : "s"} found · saved in ${r.path}`;
 }
 async function savePerf() {
@@ -1008,7 +1015,7 @@ async function savePerf() {
   const [w, h] = $("#pfcam").value.split("x").map(Number);
   const body = { mode, advanced: { devices: ids.length === PERF.info.gpus.length ? "all" : ids.join(","), width: w, height: h, jpeg: +$("#pfjpeg").value } };
   const r = await (await fetch("/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
-  if (!r.ok) { $("#pfmsg").textContent = "✕ " + r.err; return; }
+  if (!r.ok) { $("#pfmsg").innerHTML = ic("alert") + " " + r.err; return; }
   PERF.info.saved = r.saved;
   $("#pfmsg").textContent = r.restart ? "Saved. Restart DEPTHR to switch GPUs / camera (render scale applies now)." : "Saved.";
   if (!(PERF.info.effective.cli || []).includes("mode")) PERF.mode = mode;
@@ -1016,10 +1023,11 @@ async function savePerf() {
 }
 function buildPerf() {
   $("#pfmode").onchange = perfUi;
+  $("#pfseg").querySelectorAll("button").forEach((b) => { b.onclick = () => { $("#pfmode").value = b.dataset.m; perfUi(); }; });
   $("#pfjpeg").oninput = () => { $("#pfjpeg").nextElementSibling.textContent = $("#pfjpeg").value; };
   $("#pfscale").oninput = () => { PERF.rscale = +$("#pfscale").value; $("#pfscale").nextElementSibling.textContent = PERF.rscale.toFixed(2) + "×";
     localStorage.setItem("depthr.rscale", PERF.rscale); layout(); };
   $("#pfsave").onclick = savePerf;
   loadPerf();
 }
-buildPanel(); buildFxPanel(); buildBake(); buildPerf(); applyPreset(0); loadFavs(); pull(); loop();
+hydrateIcons(); buildPanel(); buildFxPanel(); buildBake(); buildPerf(); paintRanges(); favUi(); applyPreset(0); loadFavs(); pull(); loop();
