@@ -250,9 +250,9 @@ class Pipeline:
             if fid is None:
                 time.sleep(0.002)
                 continue
-            # keep webcam frames modest; the model only sees 512 anyway
-            if f.shape[1] > 1280:
-                f = cv2.resize(f, (1280, int(1280 * f.shape[0] / f.shape[1])), interpolation=cv2.INTER_AREA)
+            # cap the frame at the profile's width (Regular 1280, Advanced 1920); the model only sees 512 anyway
+            if f.shape[1] > self.args.width:
+                f = cv2.resize(f, (self.args.width, int(self.args.width * f.shape[0] / f.shape[1])), interpolation=cv2.INTER_AREA)
             try:
                 with david.lock:
                     aux, aw, ah = david(f, self.args.aux_width)
@@ -260,7 +260,7 @@ class Pipeline:
                 print("[david] error:", e, flush=True)
                 time.sleep(0.2)
                 continue
-            ok, jpg = cv2.imencode(".jpg", f, [cv2.IMWRITE_JPEG_QUALITY, 88])
+            ok, jpg = cv2.imencode(".jpg", f, [cv2.IMWRITE_JPEG_QUALITY, self.args.jpeg])
             with self.cond:
                 if fid <= self.published:
                     continue  # another GPU already showed a newer frame
@@ -369,6 +369,9 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return self._json({"ok": False, "err": f"{FAVS_FILE} is not valid JSON: {e}", "favs": []}, 500)
             return self._json({"ok": True, "path": str(FAVS_FILE), **data})
+        if u.path == "/settings":
+            return self._json({"ok": True, "mode": EFFECTIVE["mode"], "effective": EFFECTIVE, "saved": load_settings(),
+                               "gpus": GPUS, "profiles": PROFILES, "path": str(SETTINGS_FILE)})
         if u.path == "/hands":
             PIPE.hands.enabled = q.get("on", ["1"])[0] == "1"
             return self._send(200, b'{"ok":true}', "application/json")
@@ -413,6 +416,17 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True, "path": str(FAVS_FILE), "n": len(data["favs"])})
             except Exception as e:
                 return self._json({"ok": False, "err": str(e)}, 400)
+        if u.path == "/settings":   # performance profile; server-side parts apply on the next start
+            try:
+                st = validate_settings(json.loads(self.rfile.read(n)))
+                SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+                tmp = SETTINGS_FILE.with_suffix(".tmp")
+                tmp.write_text(json.dumps(st, indent=1), encoding="utf-8")
+                os.replace(tmp, SETTINGS_FILE)
+                return self._json({"ok": True, "saved": st, "restart": resolve_preview(st) != {k: EFFECTIVE[k] for k in ("mode", "devices", "width", "height", "jpeg")},
+                                   "path": str(SETTINGS_FILE)})
+            except Exception as e:
+                return self._json({"ok": False, "err": str(e)}, 400)
         if u.path == "/upload":
             raw = parse_qs(u.query).get("name", ["clip.mp4"])[0]
             stem, ext = os.path.splitext(os.path.basename(raw))
@@ -455,6 +469,83 @@ def _drain(f, n):
 
 
 SHOTS = Path(os.environ.get("DEPTHR_SHOTS", bake.HOME / "shots"))
+
+# ------------------------------------------------------------------ performance profiles
+# Regular is the default on every machine: one GPU, 720p camera. Advanced is opt-in (panel or --mode advanced):
+# all NVIDIA GPUs share the model (frames alternate, ~2x throughput), 1080p camera, sharper JPEG, and the browser
+# unlocks its render-scale slider. Order of precedence: command-line flags > settings.json > profile defaults.
+SETTINGS_FILE = Path(os.environ.get("DEPTHR_SETTINGS", bake.HOME / "settings.json"))
+PROFILES = {"regular": {"devices": "first", "width": 1280, "height": 720, "jpeg": 88},
+            "advanced": {"devices": "all", "width": 1920, "height": 1080, "jpeg": 95}}
+CAMERAS = [(1280, 720), (1920, 1080)]
+GPUS, EFFECTIVE = [], {}
+
+
+def detect_gpus():
+    try:
+        import torch
+        if not torch.cuda.is_available():
+            return []
+        return [{"id": f"cuda:{i}", "name": torch.cuda.get_device_name(i),
+                 "vram_gb": round(torch.cuda.get_device_properties(i).total_memory / 2 ** 30, 1)}
+                for i in range(torch.cuda.device_count())]
+    except Exception as e:
+        print("[depthr] GPU check failed:", e, flush=True)
+        return []
+
+
+def load_settings():
+    try:
+        return json.loads(SETTINGS_FILE.read_text(encoding="utf-8")) if SETTINGS_FILE.is_file() else {}
+    except Exception as e:
+        print(f"[depthr] ignoring unreadable {SETTINGS_FILE}: {e}", flush=True)
+        return {}
+
+
+def validate_settings(st):
+    mode = st.get("mode", "regular")
+    if mode not in PROFILES:
+        raise ValueError(f"unknown mode {mode!r}")
+    out = {"mode": mode, "advanced": {}}
+    adv = st.get("advanced") or {}
+    ids = {g["id"] for g in GPUS}
+    if "devices" in adv:
+        d = adv["devices"]
+        if d not in ("all", "first") and not (d and all(x.strip() in ids for x in d.split(","))):
+            raise ValueError(f"unknown GPU list {d!r}")
+        out["advanced"]["devices"] = d
+    if "width" in adv or "height" in adv:
+        wh = (int(adv.get("width", 0)), int(adv.get("height", 0)))
+        if wh not in CAMERAS:
+            raise ValueError(f"camera must be one of {CAMERAS}")
+        out["advanced"]["width"], out["advanced"]["height"] = wh
+    if "jpeg" in adv:
+        out["advanced"]["jpeg"] = max(70, min(98, int(adv["jpeg"])))
+    return out
+
+
+def resolve_preview(st, cli=None):
+    """Effective server settings for a settings dict (and optional CLI args)."""
+    mode = (cli and cli.mode) or st.get("mode") or "regular"
+    mode = mode if mode in PROFILES else "regular"
+    p = dict(PROFILES[mode])
+    if mode == "advanced":
+        p.update({k: v for k, v in (st.get("advanced") or {}).items() if k in p})
+    dev = p["devices"]
+    if dev == "first":
+        dev = GPUS[0]["id"] if GPUS else "cuda:0"
+    elif dev == "all":
+        dev = ",".join(g["id"] for g in GPUS) or "cuda:0"
+    r = {"mode": mode, "devices": dev, "width": p["width"], "height": p["height"], "jpeg": p["jpeg"]}
+    if cli:
+        r["cli"] = []
+        for k, a in (("devices", cli.device), ("width", cli.width), ("height", cli.height), ("jpeg", cli.jpeg)):
+            if a is not None:
+                r[k] = a
+                r["cli"].append(k)
+        if cli.mode:
+            r["cli"].append("mode")
+    return r
 FAVS_FILE = Path(os.environ.get("DEPTHR_FAVS", bake.HOME / "favorites.json"))
 BAKE = None
 
@@ -472,16 +563,28 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", default="auto", help="'auto', a webcam index, or a video path")
     ap.add_argument("--model", default="multi-task-model-vitl16_384.onnx")
-    ap.add_argument("--device", default="cuda:0", help="one GPU or a list, e.g. cuda:0,cuda:1")
+    ap.add_argument("--mode", choices=list(PROFILES), help="performance profile (default: settings.json, else regular)")
+    ap.add_argument("--device", help="one GPU or a list, e.g. cuda:0,cuda:1 (default: from the profile)")
     ap.add_argument("--dtype", default="fp16", choices=["fp16", "bf16", "fp32"])
     ap.add_argument("--no-graph", action="store_true")
-    ap.add_argument("--width", type=int, default=1280)
-    ap.add_argument("--height", type=int, default=720)
+    ap.add_argument("--width", type=int)
+    ap.add_argument("--height", type=int)
+    ap.add_argument("--jpeg", type=int, help="JPEG quality of frames sent to the browser")
     ap.add_argument("--fps", type=int, default=30)
     ap.add_argument("--aux-width", type=int, default=512)
     ap.add_argument("--port", type=int, default=8790)
     ap.add_argument("--no-autogain", action="store_true", help="don't brighten dim webcam frames")
     args = ap.parse_args()
+    global GPUS, EFFECTIVE
+    GPUS = detect_gpus()
+    if not GPUS:
+        sys.exit("[depthr] no NVIDIA GPU with CUDA found. DEPTHR needs one for the DAViD model "
+                 "(see README 'Setup': install the CUDA build of torch).")
+    EFFECTIVE = resolve_preview(load_settings(), args)
+    args.device, args.width, args.height, args.jpeg = EFFECTIVE["devices"], EFFECTIVE["width"], EFFECTIVE["height"], EFFECTIVE["jpeg"]
+    EFFECTIVE["aux_width"] = args.aux_width
+    names = ", ".join(f"{g['name']} ({g['vram_gb']} GB)" for g in GPUS)
+    print(f"[depthr] {EFFECTIVE['mode']} mode - model on {args.device} - camera {args.width}x{args.height} - GPUs found: {names}", flush=True)
     global AUTOGAIN
     AUTOGAIN = not args.no_autogain
     PIPE = Pipeline(args)

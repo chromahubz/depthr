@@ -267,9 +267,14 @@ async function pull() {
     } catch (e) { console.warn(e); $("#wait").style.display = "flex"; $("#wait").textContent = "server offline — retrying"; await new Promise((z) => setTimeout(z, 800)); }
   }
 }
+// performance profile: the server decides Regular/Advanced (GPUs, camera); the render scale lives here.
+// Regular always renders at camera resolution; Advanced unlocks 0.5x-2x. Bakes always render at 1x.
+const PERF = { mode: "regular", rscale: +(localStorage.getItem("depthr.rscale") || 1), fps: 0, n: 0, t: performance.now(), info: null };
+const rscale = () => (PERF.mode === "advanced" && !BK.on ? PERF.rscale : 1);
+function renderSize() { const s = rscale(); return [Math.max(8, Math.round(frame.w * s)), Math.max(8, Math.round(frame.h * s))]; }
 function layout() {
   if (!frame) return;
-  const w = frame.w, h = view === 4 ? frame.h * 2 : frame.h;
+  const [w, h0] = renderSize(), h = view === 4 ? h0 * 2 : h0;
   cv.width = ov.width = w; cv.height = ov.height = h;
   const st = $("#stage"), s = Math.min(st.clientWidth / w, st.clientHeight / h);
   for (const c of [cv, ov]) { c.style.width = w * s + "px"; c.style.height = h * s + "px"; }
@@ -522,7 +527,9 @@ function loop() { requestAnimationFrame(loop); if (!BK.on) render(); }
 function render(t = performance.now()) {
   now = t; const dt = Math.max(0, Math.min(100, now - lastT)); lastT = now;
   if (!frame) return;
-  ensureFbos(frame.w, frame.h);
+  const [rw, rh] = renderSize(); if (cv.width !== rw) layout();
+  ensureFbos(rw, rh);
+  PERF.n++; if (t - PERF.t > 1000) { PERF.fps = Math.round(PERF.n * 1000 / (t - PERF.t)); PERF.n = 0; PERF.t = t; }
   updateAudio(dt); updateHands(dt); updateSpells(); updateBolts();
   black += (blackTarget - black) * Math.min(1, dt / 120);
   waves = waves.filter((w) => now - w.t0 < 1600);
@@ -785,7 +792,7 @@ function hud(lights) {
   $("#hud").innerHTML =
     `<span class="pill hot"><b>${PRESETS[presetIdx][0]}</b>${FXS.id && !FXS.id.startsWith("preset-") ? " + " + (FX.find((f) => f.id === FXS.id) || {}).name : ""}</span>` +
     `<span class="pill">model <b>${s.model_ms}ms</b>${s.gpus > 1 ? " ×" + s.gpus : ""}</span>` +
-    `<span class="pill">ai <b>${s.fps}</b> fps</span><span class="pill">cam <b>${s.cam}</b>${s.gain > 1.05 ? " · gain ×" + s.gain : ""}</span>` +
+    `<span class="pill">ai <b>${s.fps}</b> fps</span><span class="pill">draw <b>${PERF.fps}</b> fps${rscale() !== 1 ? " · " + rscale() + "×" : ""}</span><span class="pill">cam <b>${s.cam}</b>${s.gain > 1.05 ? " · gain ×" + s.gain : ""}</span>` +
     `<span class="pill">hands <b>${hands.filter((h) => h.a > .5).length}</b> ${g}</span><span class="pill">lights <b>${lights.length}</b></span>` +
     (black > .5 ? `<span class="pill rec">BLACKOUT</span>` : "") + (AU.on ? `<span class="pill">♫ <b>${AU.beat > .5 ? "●" : "○"}</b></span>` : "") +
     (recorder ? `<span class="pill rec">● REC</span>` : "") + (BK.on ? `<span class="pill rec">● RENDER ${BK.done}/${BK.total}</span>` : "");
@@ -972,4 +979,47 @@ function bkLabel() {
   $("#bkgo").textContent = "● Render to " + (a === "webm" ? "WebM (transparent)" : a === "mov" ? "MOV (transparent)" : "MP4");
 }
 $("#bkalpha").onchange = bkLabel;
-buildPanel(); buildFxPanel(); buildBake(); applyPreset(0); loadFavs(); pull(); loop();
+// =============================================================== Performance panel
+async function loadPerf() {
+  let r; try { r = await (await fetch("/settings", { cache: "no-store" })).json(); } catch { return; }
+  const cliMode = (r.effective.cli || []).includes("mode");
+  PERF.info = r; PERF.mode = cliMode ? r.mode : (r.saved || {}).mode || r.mode;   // render scale follows the saved mode right away
+  const saved = r.saved || {}, adv = saved.advanced || {};
+  $("#pfmode").value = saved.mode || r.mode;
+  $("#pfgpus").innerHTML = r.gpus.map((g) => `<label class="c"><input type="checkbox" value="${g.id}"> ${g.name} · ${g.vram_gb} GB</label>`).join("");
+  const devs = (adv.devices || "all") === "all" ? r.gpus.map((g) => g.id) : adv.devices === "first" ? [r.gpus[0].id] : adv.devices.split(",");
+  $("#pfgpus").querySelectorAll("input").forEach((el) => { el.checked = devs.includes(el.value); });
+  $("#pfcam").value = `${adv.width || 1920}x${adv.height || 1080}`;
+  $("#pfjpeg").value = adv.jpeg || 95; $("#pfjpeg").oninput();
+  $("#pfscale").value = PERF.rscale; $("#pfscale").oninput();
+  perfUi(); layout();
+}
+function perfUi() {
+  const r = PERF.info; if (!r) return; const e = r.effective, adv = $("#pfmode").value === "advanced";
+  $("#pfadv").style.display = adv ? "" : "none";
+  const gp = e.devices.split(",").map((d) => (r.gpus.find((g) => g.id === d) || { name: d }).name).join(" + ");
+  $("#pfnow").innerHTML = `Running <b>${e.mode}</b> · model on ${gp} · camera ${e.width}×${e.height} · JPEG ${e.jpeg}` +
+    (e.cli && e.cli.length ? `<br>⚠ set on the command line (wins over this panel): ${e.cli.join(", ")}` : "") +
+    `<br>${r.gpus.length} NVIDIA GPU${r.gpus.length === 1 ? "" : "s"} found · saved in ${r.path}`;
+}
+async function savePerf() {
+  const mode = $("#pfmode").value, ids = [...$("#pfgpus").querySelectorAll("input:checked")].map((x) => x.value);
+  if (mode === "advanced" && !ids.length) { toast("pick at least one GPU"); return; }
+  const [w, h] = $("#pfcam").value.split("x").map(Number);
+  const body = { mode, advanced: { devices: ids.length === PERF.info.gpus.length ? "all" : ids.join(","), width: w, height: h, jpeg: +$("#pfjpeg").value } };
+  const r = await (await fetch("/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
+  if (!r.ok) { $("#pfmsg").textContent = "✕ " + r.err; return; }
+  PERF.info.saved = r.saved;
+  $("#pfmsg").textContent = r.restart ? "Saved. Restart DEPTHR to switch GPUs / camera (render scale applies now)." : "Saved.";
+  if (!(PERF.info.effective.cli || []).includes("mode")) PERF.mode = mode;
+  layout();
+}
+function buildPerf() {
+  $("#pfmode").onchange = perfUi;
+  $("#pfjpeg").oninput = () => { $("#pfjpeg").nextElementSibling.textContent = $("#pfjpeg").value; };
+  $("#pfscale").oninput = () => { PERF.rscale = +$("#pfscale").value; $("#pfscale").nextElementSibling.textContent = PERF.rscale.toFixed(2) + "×";
+    localStorage.setItem("depthr.rscale", PERF.rscale); layout(); };
+  $("#pfsave").onclick = savePerf;
+  loadPerf();
+}
+buildPanel(); buildFxPanel(); buildBake(); buildPerf(); applyPreset(0); loadFavs(); pull(); loop();

@@ -30,6 +30,20 @@ Double-click **Start Depthr.bat** (opens http://localhost:8790 after the ~30 s m
 .\run.ps1 --source myclip.mp4              # loop a video instead
 .\run.ps1 --device cuda:0,cuda:1           # alternate frames over both GPUs (only helps if GPU 1 is idle)
 ```
+### Regular vs Advanced (other PCs)
+**Regular** is the default on every machine: the depth model on one NVIDIA GPU, 720p camera, effects drawn at camera
+resolution. **Advanced** is opt-in from the panel (**Performance**) or `--mode advanced`:
+
+| | Regular | Advanced |
+|---|---|---|
+| GPUs for the depth model | the first one | all found, or the ones you tick (frames alternate) |
+| Camera / JPEG to browser | 1280×720 / 88 | 1920×1080 / 95 (adjustable) |
+| Effect render scale | 1× | 0.5×–2× slider (live; bakes always render at 1×) |
+
+The choice is saved to `settings.json` in `DEPTHR_HOME`; GPU and camera changes apply on the next start, the
+render scale immediately. Command-line flags (`--device`, `--width`, `--height`, `--jpeg`, `--mode`) win over the
+file. The HUD shows `ai` fps (depth model) and `draw` fps (browser). No NVIDIA GPU: the server stops with a message.
+
 Only one app can hold the webcam â€” close Chrome tabs using it, OBS, CapCut first.
 
 ## Film first, FX later (render a clip to MP4)

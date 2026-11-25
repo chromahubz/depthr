@@ -112,6 +112,20 @@ kbd{background:#1b1e27;border:1px solid var(--line);border-radius:4px;padding:0 
    <label class="c"><input type="checkbox" id="fz"> Flip Z</label>
   </details>
 
+  <details id="perfbox"><summary>Performance</summary>
+   <label class="k">Mode<select id="pfmode"><option value="regular">Regular (any NVIDIA PC)</option><option value="advanced">Advanced (all GPUs, 1080p, render scale)</option></select></label>
+   <div id="pfadv">
+    <div class="note" style="margin-top:2px">GPUs for the depth model (frames alternate between them):</div>
+    <div id="pfgpus"></div>
+    <label class="k">Camera<select id="pfcam"><option value="1280x720">1280×720</option><option value="1920x1080">1920×1080</option></select></label>
+    <label class="s">JPEG quality<input type="range" id="pfjpeg" min="70" max="98" step="1" value="95"><span></span></label>
+    <label class="s" title="Resolution the effects are drawn at, relative to the camera. Higher = smoother edges and fine lines, more GPU work. Renders always use 1×.">Render scale<input type="range" id="pfscale" min=".5" max="2" step=".25" value="1"><span></span></label>
+   </div>
+   <div class="row"><button id="pfsave">Save</button></div>
+   <div class="note" id="pfmsg"></div>
+   <div class="note" id="pfnow"></div>
+  </details>
+
   <details open><summary>Source &amp; capture</summary>
    <div class="row"><input type="text" id="src" placeholder="auto, a webcam index, or a video path"><button id="srcgo" style="flex:0 0 54px">Use</button></div>
    <div class="row"><button id="rec">● Record</button><button id="snap">Snapshot</button><button id="clear">Clear art</button></div>
