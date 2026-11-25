@@ -21,7 +21,7 @@ vec3 fx(vec2 t){ vec3 c = DS(t); float l = lum(c); vec3 n = N(t); float m = MM(t
   o = mix(o, max(o, PV(t + vec2(.003*sin(uTime*2.), 0.))*.96), .7*uB); keep(o);
   return o*mVig(t,.6) + mGrain(t,.02); }`);
 
-fx("Marianne", "mar_liquid", "Liquid Melt", "melt", "speed", `${MAR_LIB}
+fx("Marianne", "mar_liquid", "Cyan Melt", "melt", "speed", `${MAR_LIB}
 vec3 fx(vec2 t){ vec2 p = AS(t); float tm = uTime*.15*(1.+uB*3.);
   vec2 w = vec2(fbm(p*2.5 + tm), fbm(p*2.5 + 7.3 - tm)) - .5;
   vec2 q = t + w*mix(.03,.22,uA)*(.4 + MM(t));
